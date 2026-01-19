@@ -5,6 +5,7 @@ import colorsys
 import random
 import time
 import threading
+import math
 try:
     from colorspacious import cspace_convert
     HAS_COLORSPACIOUS = True
@@ -16,10 +17,27 @@ class ColorTransitionApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Color Transition Visualizer")
-        self.root.geometry("600x500")
+        # Let window size itself based on content
+        # self.root.geometry("900x1100")  # Removed fixed size
 
         self.transition_running = False
         self.transition_thread = None
+        self.cycling_tests = False
+        self.cycle_thread = None
+
+        # Define problematic test cases for RGB interpolation
+        self.test_cases = {
+            "Red → Green (muddy brown)": ("#ff0000", "#00ff00"),
+            "Blue → Yellow (gray/desaturated)": ("#0000ff", "#ffff00"),
+            "Red → Cyan (desaturated)": ("#ff0000", "#00ffff"),
+            "Magenta → Green (gray)": ("#ff00ff", "#00ff00"),
+            "Orange → Blue (dark/muddy)": ("#ff8000", "#0080ff"),
+            "Bright Red → Dark Green (brightness dip)": ("#ff0000", "#006400"),
+            "Purple → Yellow (muddy/gray)": ("#8000ff", "#ffff00"),
+            "Lime → Magenta (desaturated)": ("#80ff00", "#ff00ff"),
+            "Cyan → Orange (gray mid-tones)": ("#00ffff", "#ff8800"),
+            "Pink → Teal (brightness shift)": ("#ff69b4", "#008080")
+        }
 
         # Main container
         main_frame = ttk.Frame(root, padding="10")
@@ -70,28 +88,96 @@ class ColorTransitionApp:
         self.to_color_preview = tk.Canvas(main_frame, width=30, height=30, bg="#00ff00", highlightthickness=1)
         self.to_color_preview.grid(row=2, column=2, sticky=tk.W, pady=5)
 
+        # Test cases selection
+        ttk.Label(main_frame, text="Test Cases:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        self.test_case_var = tk.StringVar()
+        self.test_case_combo = ttk.Combobox(main_frame, textvariable=self.test_case_var, state="readonly", width=30)
+        self.test_case_combo['values'] = tuple(self.test_cases.keys())
+        self.test_case_combo.bind('<<ComboboxSelected>>', self.load_test_case)
+        self.test_case_combo.grid(row=3, column=1, columnspan=2, sticky=tk.W, pady=5)
+
+        # Cycle test cases button
+        self.cycle_btn = ttk.Button(main_frame, text="Cycle All Test Cases", command=self.cycle_test_cases)
+        self.cycle_btn.grid(row=4, column=0, columnspan=3, pady=5)
+
         # Randomize button
         self.randomize_btn = ttk.Button(main_frame, text="Randomize Colors", command=self.randomize_colors)
-        self.randomize_btn.grid(row=3, column=0, columnspan=3, pady=10)
+        self.randomize_btn.grid(row=5, column=0, columnspan=3, pady=5)
 
         # Transition duration
-        ttk.Label(main_frame, text="Duration (seconds):").grid(row=4, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Duration (seconds):").grid(row=6, column=0, sticky=tk.W, pady=5)
         self.duration_var = tk.StringVar(value="3")
         self.duration_entry = ttk.Entry(main_frame, textvariable=self.duration_var, width=15)
-        self.duration_entry.grid(row=4, column=1, sticky=tk.W, pady=5)
+        self.duration_entry.grid(row=6, column=1, sticky=tk.W, pady=5)
 
         # Go button
         self.go_btn = ttk.Button(main_frame, text="Go", command=self.start_transition)
-        self.go_btn.grid(row=5, column=0, columnspan=3, pady=10)
+        self.go_btn.grid(row=7, column=0, columnspan=3, pady=10)
 
-        # Transition display canvas
-        ttk.Label(main_frame, text="Transition Preview:").grid(row=6, column=0, columnspan=3, sticky=tk.W, pady=(10, 5))
-        self.canvas = tk.Canvas(main_frame, width=550, height=200, bg="white", highlightthickness=1)
-        self.canvas.grid(row=7, column=0, columnspan=3, pady=5)
+        # Transition display - multiple algorithm patches
+        self.previews_label = ttk.Label(main_frame, text="Transition Previews - Color Distance (ΔE): --", font=('Arial', 10))
+        self.previews_label.grid(row=8, column=0, columnspan=3, sticky=tk.W, pady=(10, 5))
 
-        # Bind color entry changes to update previews
+        # Create frame for algorithm patches
+        patches_frame = ttk.Frame(main_frame)
+        patches_frame.grid(row=9, column=0, columnspan=3, pady=5)
+
+        # Get all algorithm names
+        algorithms = [
+            'Linear RGB',
+            'HSV (Hue-Saturation-Value)',
+            'HSL (Hue-Saturation-Lightness)',
+            'Cubic Bezier RGB',
+            'Exponential RGB'
+        ]
+        if HAS_COLORSPACIOUS:
+            algorithms.extend([
+                'LAB (CIE L*a*b*)',
+                'LCH (Lightness-Chroma-Hue)'
+            ])
+        algorithms.extend([
+            'OKLab (Perceptual)',
+            'OKLCh (Perceptual Cylindrical)'
+        ])
+
+        # Create patches in a grid (3 columns)
+        self.algorithm_patches = {}
+        row = 0
+        col = 0
+        patch_width = 170
+        patch_height = 80
+
+        for i, algo in enumerate(algorithms):
+            # Create container for each patch
+            patch_container = ttk.Frame(patches_frame)
+            patch_container.grid(row=row, column=col, padx=5, pady=5)
+
+            # Algorithm name label
+            label = ttk.Label(patch_container, text=algo, font=('Arial', 8))
+            label.pack()
+
+            # Color patch canvas
+            canvas = tk.Canvas(patch_container, width=patch_width, height=patch_height,
+                             bg="white", highlightthickness=1)
+            canvas.pack()
+
+            self.algorithm_patches[algo] = canvas
+
+            # Move to next position
+            col += 1
+            if col >= 3:
+                col = 0
+                row += 1
+
+        # Bind color entry changes to update previews and distance
         self.from_color_var.trace('w', lambda *args: self.update_color_preview(self.from_color_var, self.from_color_preview))
         self.to_color_var.trace('w', lambda *args: self.update_color_preview(self.to_color_var, self.to_color_preview))
+
+        self.from_color_var.trace('w', lambda *args: self.update_color_distance())
+        self.to_color_var.trace('w', lambda *args: self.update_color_distance())
+
+        # Calculate initial distance
+        self.update_color_distance()
 
     def update_color_preview(self, color_var, preview_canvas):
         """Update the color preview when hex input changes"""
@@ -101,6 +187,64 @@ class ColorTransitionApp:
                 preview_canvas.config(bg=color)
         except:
             pass
+
+    def calculate_delta_e_oklab(self, rgb1, rgb2):
+        """Calculate Delta E (color difference) using OKLab space"""
+        # Convert both colors to OKLab
+        linear1 = self.rgb_to_linear(*rgb1)
+        linear2 = self.rgb_to_linear(*rgb2)
+
+        oklab1 = self.linear_rgb_to_oklab(*linear1)
+        oklab2 = self.linear_rgb_to_oklab(*linear2)
+
+        # Calculate Euclidean distance in OKLab space
+        delta_L = oklab1[0] - oklab2[0]
+        delta_a = oklab1[1] - oklab2[1]
+        delta_b = oklab1[2] - oklab2[2]
+
+        delta_e = math.sqrt(delta_L**2 + delta_a**2 + delta_b**2)
+
+        # Scale to match traditional Delta E ranges (OKLab L is 0-1, traditional is 0-100)
+        # Multiply by 100 to get values comparable to CIE Delta E
+        delta_e = delta_e * 100
+
+        return delta_e
+
+    def update_color_distance(self):
+        """Update the color distance display"""
+        try:
+            from_hex = self.from_color_var.get()
+            to_hex = self.to_color_var.get()
+
+            if not (from_hex.startswith('#') and len(from_hex) == 7):
+                self.previews_label.config(text="Transition Previews - Color Distance (ΔE): --")
+                return
+            if not (to_hex.startswith('#') and len(to_hex) == 7):
+                self.previews_label.config(text="Transition Previews - Color Distance (ΔE): --")
+                return
+
+            from_rgb = self.hex_to_rgb(from_hex)
+            to_rgb = self.hex_to_rgb(to_hex)
+
+            # Calculate Delta E using OKLab (perceptually uniform)
+            delta_e = self.calculate_delta_e_oklab(from_rgb, to_rgb)
+
+            # Update label with description
+            if delta_e < 1.0:
+                desc = "(imperceptible)"
+            elif delta_e < 2.3:
+                desc = "(just noticeable)"
+            elif delta_e < 5.0:
+                desc = "(noticeable)"
+            elif delta_e < 10.0:
+                desc = "(significant)"
+            else:
+                desc = "(very large)"
+
+            self.previews_label.config(text=f"Transition Previews - Color Distance (ΔE): {delta_e:.2f} {desc}")
+        except Exception as e:
+            self.previews_label.config(text="Transition Previews - Color Distance (ΔE): --")
+            print(f"Error calculating distance: {e}")
 
     def hex_to_rgb(self, hex_color):
         """Convert hex color to RGB tuple (0-255)"""
@@ -188,6 +332,90 @@ class ColorTransitionApp:
         self.from_color_var.set(self.random_color())
         self.to_color_var.set(self.random_color())
         self.start_transition()
+
+    def load_test_case(self, event=None):
+        """Load selected test case colors"""
+        test_name = self.test_case_var.get()
+        if test_name in self.test_cases:
+            from_color, to_color = self.test_cases[test_name]
+            self.from_color_var.set(from_color)
+            self.to_color_var.set(to_color)
+            self.start_transition()
+
+    def cycle_test_cases(self):
+        """Cycle through all test cases with 2 second pause between each"""
+        if self.cycling_tests:
+            # Stop cycling
+            self.cycling_tests = False
+            self.cycle_btn.config(text="Cycle All Test Cases")
+            return
+
+        # Start cycling
+        self.cycling_tests = True
+        self.cycle_btn.config(text="Stop Cycling")
+        self.go_btn.config(state='disabled')
+        self.randomize_btn.config(state='disabled')
+
+        # Run cycle in separate thread
+        self.cycle_thread = threading.Thread(
+            target=self.run_cycle,
+            daemon=True
+        )
+        self.cycle_thread.start()
+
+    def run_cycle(self):
+        """Run through all test cases once"""
+        test_names = list(self.test_cases.keys())
+
+        # Run through test cases once
+        for test_name in test_names:
+            if not self.cycling_tests:
+                break
+
+            # Load test case
+            from_color, to_color = self.test_cases[test_name]
+            self.root.after(0, self.from_color_var.set, from_color)
+            self.root.after(0, self.to_color_var.set, to_color)
+            self.root.after(0, self.test_case_combo.set, test_name)
+
+            # Wait a moment for colors to update
+            time.sleep(0.1)
+
+            # Get colors and duration
+            try:
+                from_rgb = self.hex_to_rgb(from_color)
+                to_rgb = self.hex_to_rgb(to_color)
+                duration = float(self.duration_var.get())
+            except:
+                continue
+
+            # Run transition
+            start_time = time.time()
+            while time.time() - start_time < duration:
+                if not self.cycling_tests:
+                    break
+
+                elapsed = time.time() - start_time
+                t = elapsed / duration
+
+                # Update all patches
+                for algo_name, canvas in self.algorithm_patches.items():
+                    transition_func = self.get_transition_function(algo_name)
+                    current_rgb = transition_func(from_rgb, to_rgb, t)
+                    current_hex = self.rgb_to_hex(*current_rgb)
+                    self.root.after(0, self.update_patch, canvas, current_hex)
+
+                time.sleep(1/60)
+
+            # Pause between test cases (but not after the last one)
+            if self.cycling_tests and test_name != test_names[-1]:
+                time.sleep(2)
+
+        # Stop cycling and re-enable buttons
+        self.cycling_tests = False
+        self.root.after(0, self.cycle_btn.config, {'text': 'Cycle All Test Cases'})
+        self.root.after(0, self.go_btn.config, {'state': 'normal'})
+        self.root.after(0, self.randomize_btn.config, {'state': 'normal'})
 
     def linear_rgb_transition(self, from_rgb, to_rgb, t):
         """Linear interpolation in RGB space"""
@@ -392,13 +620,9 @@ class ColorTransitionApp:
         self.transition_thread.start()
 
     def run_transition(self, from_rgb, to_rgb, duration):
-        """Run the actual transition animation"""
-        algorithm = self.algorithm_var.get()
-        transition_func = self.get_transition_function(algorithm)
-
+        """Run the actual transition animation for all algorithms"""
         # Debug output
-        print(f"Running transition: {algorithm}")
-        print(f"From: {self.rgb_to_hex(*from_rgb)} -> To: {self.rgb_to_hex(*to_rgb)}")
+        print(f"Running transitions from {self.rgb_to_hex(*from_rgb)} -> {self.rgb_to_hex(*to_rgb)}")
 
         steps = 60  # Number of color steps to display
         start_time = time.time()
@@ -410,26 +634,29 @@ class ColorTransitionApp:
 
             t = elapsed / duration
 
-            # Calculate intermediate color
-            current_rgb = transition_func(from_rgb, to_rgb, t)
-            current_hex = self.rgb_to_hex(*current_rgb)
-
-            # Update canvas
-            self.root.after(0, self.update_canvas, current_hex)
+            # Update all algorithm patches simultaneously
+            for algo_name, canvas in self.algorithm_patches.items():
+                transition_func = self.get_transition_function(algo_name)
+                current_rgb = transition_func(from_rgb, to_rgb, t)
+                current_hex = self.rgb_to_hex(*current_rgb)
+                self.root.after(0, self.update_patch, canvas, current_hex)
 
             # Sleep for smooth animation (aim for ~60 FPS)
             time.sleep(1/60)
 
-        # Set final color
-        final_hex = self.rgb_to_hex(*to_rgb)
-        self.root.after(0, self.update_canvas, final_hex)
+        # Set final colors for all patches
+        for algo_name, canvas in self.algorithm_patches.items():
+            transition_func = self.get_transition_function(algo_name)
+            final_rgb = transition_func(from_rgb, to_rgb, 1.0)
+            final_hex = self.rgb_to_hex(*final_rgb)
+            self.root.after(0, self.update_patch, canvas, final_hex)
 
         # Re-enable buttons
         self.root.after(0, self.enable_buttons)
 
-    def update_canvas(self, color):
-        """Update the canvas with the current color"""
-        self.canvas.config(bg=color)
+    def update_patch(self, canvas, color):
+        """Update a specific algorithm patch with the current color"""
+        canvas.config(bg=color)
 
     def enable_buttons(self):
         """Re-enable buttons after transition completes"""
