@@ -9,7 +9,10 @@ import os
 import sys
 import argparse
 import subprocess
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for parallel plotting
 import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.io import wavfile
@@ -18,7 +21,7 @@ import json
 
 
 class AudioFrequencyAnalyzer:
-    def __init__(self, input_file, output_dir="output", spike_threshold_db=10, fft_size=65536):
+    def __init__(self, input_file, output_dir="output", spike_threshold_db=10, fft_size=65536, verbose=False, use_prominence=True):
         """
         Initialize the audio frequency analyzer.
 
@@ -27,12 +30,16 @@ class AudioFrequencyAnalyzer:
             output_dir: Base directory for output files
             spike_threshold_db: Minimum dB difference above surrounding frequencies to consider a spike
             fft_size: FFT size for frequency analysis (default: 65536)
+            verbose: Show detailed per-segment output (default: False)
+            use_prominence: Use prominence-based detection (True) or absolute amplitude (False) (default: True)
         """
         self.input_file = Path(input_file)
         self.spike_threshold_db = spike_threshold_db
         self.fft_size = fft_size
         self.segment_duration = 60  # seconds
         self.spikes_detected = []
+        self.verbose = verbose
+        self.use_prominence = use_prominence
 
         if not self.input_file.exists():
             raise FileNotFoundError(f"Input file not found: {input_file}")
@@ -197,7 +204,7 @@ class AudioFrequencyAnalyzer:
         return frequencies, magnitude_db_left, magnitude_db_right, sample_rate, is_stereo
 
     def plot_fft(self, frequencies, magnitude_db_left, magnitude_db_right, audio_file,
-                 is_stereo, highlight_spikes=None):
+                 is_stereo, sample_rate, highlight_spikes=None):
         """
         Create and save a plot of the FFT results.
 
@@ -207,6 +214,7 @@ class AudioFrequencyAnalyzer:
             magnitude_db_right: Array of magnitudes in dB for right channel (or None for mono)
             audio_file: Path to the audio file being analyzed
             is_stereo: Whether the audio is stereo
+            sample_rate: Sample rate of the audio in Hz
             highlight_spikes: Optional dict with 'left' and 'right' keys containing (freq, amp) tuples
         """
         high_freq_mask = frequencies >= 15000
@@ -261,8 +269,10 @@ class AudioFrequencyAnalyzer:
                         label=f'Spike: {spike_freq/1000:.2f}kHz, {spike_amp:.2f}dB')
             ax4.legend()
 
-            # Add overall title
-            fig.suptitle(f'FFT Analysis: {audio_file.name}', fontsize=14, y=0.995)
+            # Add overall title with FFT size and frequency resolution
+            freq_resolution = sample_rate / self.fft_size
+            fig.suptitle(f'FFT Analysis: {audio_file.name} | FFT Size: {self.fft_size:,} | Freq Resolution: {freq_resolution:.2f} Hz', 
+                        fontsize=12, y=0.995)
 
         else:
             # Mono: use 2x1 layout as before
@@ -272,7 +282,8 @@ class AudioFrequencyAnalyzer:
             ax1.plot(frequencies / 1000, magnitude_db_left, linewidth=0.5)
             ax1.set_xlabel('Frequency (kHz)')
             ax1.set_ylabel('Magnitude (dB)')
-            ax1.set_title(f'FFT Analysis: {audio_file.name}')
+            freq_resolution = sample_rate / self.fft_size
+            ax1.set_title(f'FFT Analysis: {audio_file.name} | FFT Size: {self.fft_size:,} | Freq Resolution: {freq_resolution:.2f} Hz')
             ax1.grid(True, alpha=0.3)
             ax1.set_xlim([0, frequencies[-1] / 1000])
 
@@ -303,6 +314,7 @@ class AudioFrequencyAnalyzer:
     def detect_spike_above_17khz(self, frequencies, magnitude_db):
         """
         Detect if there's a noticeable spike above 17kHz.
+        Finds the spike with the largest prominence (difference from surrounding baseline).
 
         Returns:
             tuple: (spike_detected, peak_frequency, peak_amplitude) or (False, None, None)
@@ -315,121 +327,426 @@ class AudioFrequencyAnalyzer:
         high_freqs = frequencies[mask]
         high_mags = magnitude_db[mask]
 
-        # Find the peak in this region
-        peak_idx = np.argmax(high_mags)
-        peak_freq = high_freqs[peak_idx]
-        peak_amp = high_mags[peak_idx]
-
-        # Calculate the median magnitude in the high frequency region
-        # (median is more robust to outliers than mean)
-        # Exclude the peak and nearby frequencies to avoid biasing the baseline
+        # Find all local maxima using scipy's find_peaks
+        from scipy.signal import find_peaks
+        peaks, _ = find_peaks(high_mags, prominence=1)  # Find peaks with at least 1dB prominence
+        
+        if len(peaks) == 0:
+            # No peaks found, check if there's any significant spike at all
+            return False, None, None
+        
+        # For each peak, calculate its prominence relative to nearby baseline
         window_size = max(10, len(high_mags) // 20)  # Use ~5% of data or min 10 points
-        start_idx = max(0, peak_idx - window_size)
-        end_idx = min(len(high_mags), peak_idx + window_size + 1)
-
-        # Create mask excluding the peak region
-        baseline_mask = np.ones(len(high_mags), dtype=bool)
-        baseline_mask[start_idx:end_idx] = False
-
-        if np.any(baseline_mask):
-            baseline_mag = np.median(high_mags[baseline_mask])
-        else:
-            # Fallback if not enough data points
-            baseline_mag = np.median(high_mags)
-
-        # Calculate how much the peak stands out above the baseline
-        spike_prominence = peak_amp - baseline_mag
-
-        # A spike is noticeable if it's at least spike_threshold_db above the baseline
-        if spike_prominence >= self.spike_threshold_db:
+        max_prominence = -np.inf
+        best_peak_idx = None
+        
+        for peak_idx in peaks:
+            # Define window around this peak
+            start_idx = max(0, peak_idx - window_size)
+            end_idx = min(len(high_mags), peak_idx + window_size + 1)
+            
+            # Get baseline from adjacent regions (before and after the peak window)
+            left_region = high_mags[max(0, start_idx - window_size):start_idx]
+            right_region = high_mags[end_idx:min(len(high_mags), end_idx + window_size)]
+            
+            # Combine adjacent regions for baseline
+            adjacent_values = np.concatenate([left_region, right_region]) if len(left_region) > 0 and len(right_region) > 0 else (
+                left_region if len(left_region) > 0 else right_region
+            )
+            
+            if len(adjacent_values) > 0:
+                local_baseline = np.median(adjacent_values)
+            else:
+                # Fallback to excluding just the peak itself
+                baseline_mask = np.ones(len(high_mags), dtype=bool)
+                baseline_mask[peak_idx] = False
+                local_baseline = np.median(high_mags[baseline_mask])
+            
+            # Calculate prominence for this peak
+            prominence = high_mags[peak_idx] - local_baseline
+            
+            if prominence > max_prominence:
+                max_prominence = prominence
+                best_peak_idx = peak_idx
+        
+        # Check if the best spike meets the threshold
+        if best_peak_idx is not None and max_prominence >= self.spike_threshold_db:
+            peak_freq = high_freqs[best_peak_idx]
+            peak_amp = high_mags[best_peak_idx]
             return True, peak_freq, peak_amp
 
         return False, None, None
+    
+    def detect_spike_above_17khz_absolute(self, frequencies, magnitude_db):
+        """
+        Detect spikes above 17kHz using absolute amplitude (old behavior).
+        Returns (has_spike, peak_frequency, peak_amplitude)
+        """
+        # Filter for frequencies above 17kHz
+        mask = frequencies >= 17000
+        if not np.any(mask):
+            return False, None, None
+        
+        high_freqs = frequencies[mask]
+        high_mags = magnitude_db[mask]
+        
+        # Find peak with maximum absolute amplitude
+        peak_idx = np.argmax(high_mags)
+        peak_freq = high_freqs[peak_idx]
+        peak_amp = high_mags[peak_idx]
+        
+        # Calculate baseline from all other frequencies
+        baseline_mask = np.ones(len(high_mags), dtype=bool)
+        baseline_mask[peak_idx] = False
+        baseline = np.median(high_mags[baseline_mask])
+        
+        # Check if spike is significant
+        if peak_amp - baseline >= self.spike_threshold_db:
+            return True, peak_freq, peak_amp
+        
+        return False, None, None
 
-    def analyze_segments(self, segment_files):
-        """Analyze all audio segments for high-frequency spikes."""
-        print("\n" + "="*60)
-        print("Analyzing segments for high-frequency spikes...")
-        print("="*60 + "\n")
-
-        for segment_idx, segment_file in enumerate(segment_files):
-            print(f"Processing: {segment_file.name}")
-
-            # Perform FFT
-            frequencies, mag_left, mag_right, sample_rate, is_stereo = self.perform_fft_analysis(segment_file)
-            print(f"  Sample rate: {sample_rate} Hz")
-            print(f"  Channels: {'Stereo' if is_stereo else 'Mono'}")
-            print(f"  Max frequency analyzed: {frequencies[-1]/1000:.2f} kHz")
-
-            highlight_spikes = {}
-
-            # Calculate time for this segment (start of segment in seconds)
-            segment_time = segment_idx * self.segment_duration
-
-            # Detect spike in left channel (or mono)
-            spike_detected_left, peak_freq_left, peak_amp_left = self.detect_spike_above_17khz(
-                frequencies, mag_left
+    @staticmethod
+    def process_segment_worker(segment_file, segment_idx, segment_duration, fft_size, 
+                               spike_threshold_db, analysis_dir, use_prominence=True):
+        """
+        Worker function to process a single segment in parallel.
+        Returns spike detection results for the segment.
+        """
+        # Create a temporary analyzer instance just for this worker
+        # We need to recreate objects since they can't be pickled across processes
+        from pathlib import Path
+        import numpy as np
+        from scipy.io import wavfile
+        from scipy import signal
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        
+        segment_file = Path(segment_file)
+        analysis_dir = Path(analysis_dir)
+        
+        # Read the audio file
+        sample_rate, data = wavfile.read(str(segment_file))
+        
+        # Check if stereo or mono
+        is_stereo = len(data.shape) > 1 and data.shape[1] == 2
+        data = data.astype(float)
+        
+        # Perform FFT analysis
+        if is_stereo:
+            left_channel = data[:, 0]
+            right_channel = data[:, 1]
+            
+            frequencies, psd_left = signal.welch(
+                left_channel, fs=sample_rate,
+                nperseg=min(len(left_channel), fft_size),
+                noverlap=None, nfft=fft_size, scaling='spectrum'
             )
-
-            if spike_detected_left:
-                channel_label = 'Left' if is_stereo else 'Mono'
-                print(f"  ✓ SPIKE DETECTED ({channel_label}): {peak_freq_left/1000:.2f} kHz at {peak_amp_left:.2f} dB")
-                self.spikes_detected.append({
+            _, psd_right = signal.welch(
+                right_channel, fs=sample_rate,
+                nperseg=min(len(right_channel), fft_size),
+                noverlap=None, nfft=fft_size, scaling='spectrum'
+            )
+            mag_left = 10 * np.log10(psd_left + 1e-12)
+            mag_right = 10 * np.log10(psd_right + 1e-12)
+        else:
+            frequencies, psd = signal.welch(
+                data, fs=sample_rate,
+                nperseg=min(len(data), fft_size),
+                noverlap=None, nfft=fft_size, scaling='spectrum'
+            )
+            mag_left = 10 * np.log10(psd + 1e-12)
+            mag_right = None
+        
+        # Detect spikes using prominence or absolute amplitude
+        def detect_spike(frequencies, magnitude_db, spike_threshold_db, use_prominence):
+            mask = frequencies >= 17000
+            if not np.any(mask):
+                return False, None, None
+            
+            high_freqs = frequencies[mask]
+            high_mags = magnitude_db[mask]
+            
+            if use_prominence:
+                # New behavior: Find spike with maximum prominence
+                from scipy.signal import find_peaks
+                peaks, _ = find_peaks(high_mags, prominence=1)
+                
+                if len(peaks) == 0:
+                    return False, None, None
+                
+                # For each peak, calculate prominence relative to nearby baseline
+                window_size = max(10, len(high_mags) // 20)
+                max_prominence = -np.inf
+                best_peak_idx = None
+                
+                for peak_idx in peaks:
+                    start_idx = max(0, peak_idx - window_size)
+                    end_idx = min(len(high_mags), peak_idx + window_size + 1)
+                    
+                    left_region = high_mags[max(0, start_idx - window_size):start_idx]
+                    right_region = high_mags[end_idx:min(len(high_mags), end_idx + window_size)]
+                    
+                    adjacent_values = np.concatenate([left_region, right_region]) if len(left_region) > 0 and len(right_region) > 0 else (
+                        left_region if len(left_region) > 0 else right_region
+                    )
+                    
+                    if len(adjacent_values) > 0:
+                        local_baseline = np.median(adjacent_values)
+                    else:
+                        baseline_mask = np.ones(len(high_mags), dtype=bool)
+                        baseline_mask[peak_idx] = False
+                        local_baseline = np.median(high_mags[baseline_mask])
+                    
+                    prominence = high_mags[peak_idx] - local_baseline
+                    
+                    if prominence > max_prominence:
+                        max_prominence = prominence
+                        best_peak_idx = peak_idx
+                
+                if best_peak_idx is not None and max_prominence >= spike_threshold_db:
+                    peak_freq = high_freqs[best_peak_idx]
+                    peak_amp = high_mags[best_peak_idx]
+                    return True, peak_freq, peak_amp
+            else:
+                # Old behavior: Find spike with maximum absolute amplitude
+                peak_idx = np.argmax(high_mags)
+                peak_freq = high_freqs[peak_idx]
+                peak_amp = high_mags[peak_idx]
+                
+                # Calculate baseline from all other frequencies
+                baseline_mask = np.ones(len(high_mags), dtype=bool)
+                baseline_mask[peak_idx] = False
+                baseline = np.median(high_mags[baseline_mask])
+                
+                # Check if spike is significant
+                if peak_amp - baseline >= spike_threshold_db:
+                    return True, peak_freq, peak_amp
+            
+            return False, None, None
+        
+        # Detect spikes
+        spike_detected_left, peak_freq_left, peak_amp_left = detect_spike(
+            frequencies, mag_left, spike_threshold_db, use_prominence
+        )
+        
+        spikes_found = []
+        highlight_spikes = {}
+        segment_time = segment_idx * segment_duration
+        
+        if spike_detected_left:
+            channel_label = 'left' if is_stereo else 'mono'
+            spikes_found.append({
+                'segment': segment_file.name,
+                'segment_index': segment_idx,
+                'time_seconds': segment_time,
+                'channel': channel_label,
+                'frequency_hz': float(peak_freq_left),
+                'frequency_khz': float(peak_freq_left / 1000),
+                'amplitude_db': float(peak_amp_left)
+            })
+            highlight_spikes['left'] = (peak_freq_left, peak_amp_left)
+        
+        if is_stereo:
+            spike_detected_right, peak_freq_right, peak_amp_right = detect_spike(
+                frequencies, mag_right, spike_threshold_db, use_prominence
+            )
+            if spike_detected_right:
+                spikes_found.append({
                     'segment': segment_file.name,
                     'segment_index': segment_idx,
                     'time_seconds': segment_time,
-                    'channel': channel_label.lower(),
-                    'frequency_hz': float(peak_freq_left),
-                    'frequency_khz': float(peak_freq_left / 1000),
-                    'amplitude_db': float(peak_amp_left)
+                    'channel': 'right',
+                    'frequency_hz': float(peak_freq_right),
+                    'frequency_khz': float(peak_freq_right / 1000),
+                    'amplitude_db': float(peak_amp_right)
                 })
-                highlight_spikes['left'] = (peak_freq_left, peak_amp_left)
+                highlight_spikes['right'] = (peak_freq_right, peak_amp_right)
+        
+        # Generate plot
+        high_freq_mask = frequencies >= 15000
+        
+        if is_stereo:
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(18, 10))
+            
+            ax1.plot(frequencies / 1000, mag_left, linewidth=0.5, color='blue')
+            ax1.set_xlabel('Frequency (kHz)')
+            ax1.set_ylabel('Magnitude (dB)')
+            ax1.set_title('Left Channel - Full Spectrum')
+            ax1.grid(True, alpha=0.3)
+            ax1.set_xlim([0, frequencies[-1] / 1000])
+            
+            ax2.plot(frequencies / 1000, mag_right, linewidth=0.5, color='red')
+            ax2.set_xlabel('Frequency (kHz)')
+            ax2.set_ylabel('Magnitude (dB)')
+            ax2.set_title('Right Channel - Full Spectrum')
+            ax2.grid(True, alpha=0.3)
+            ax2.set_xlim([0, frequencies[-1] / 1000])
+            
+            ax3.plot(frequencies[high_freq_mask] / 1000, mag_left[high_freq_mask],
+                    linewidth=1, color='blue')
+            ax3.set_xlabel('Frequency (kHz)')
+            ax3.set_ylabel('Magnitude (dB)')
+            ax3.set_title('Left Channel - High Frequency (15kHz+)')
+            ax3.grid(True, alpha=0.3)
+            ax3.axvline(x=17, color='gray', linestyle='--', alpha=0.5, label='17kHz threshold')
+            if 'left' in highlight_spikes:
+                spike_freq, spike_amp = highlight_spikes['left']
+                ax3.plot(spike_freq / 1000, spike_amp, 'bo', markersize=10,
+                        label=f'Spike: {spike_freq/1000:.2f}kHz, {spike_amp:.2f}dB')
+            ax3.legend()
+            
+            ax4.plot(frequencies[high_freq_mask] / 1000, mag_right[high_freq_mask],
+                    linewidth=1, color='red')
+            ax4.set_xlabel('Frequency (kHz)')
+            ax4.set_ylabel('Magnitude (dB)')
+            ax4.set_title('Right Channel - High Frequency (15kHz+)')
+            ax4.grid(True, alpha=0.3)
+            ax4.axvline(x=17, color='gray', linestyle='--', alpha=0.5, label='17kHz threshold')
+            if 'right' in highlight_spikes:
+                spike_freq, spike_amp = highlight_spikes['right']
+                ax4.plot(spike_freq / 1000, spike_amp, 'ro', markersize=10,
+                        label=f'Spike: {spike_freq/1000:.2f}kHz, {spike_amp:.2f}dB')
+            ax4.legend()
+            
+            freq_resolution = sample_rate / fft_size
+            fig.suptitle(f'FFT Analysis: {segment_file.name} | FFT Size: {fft_size:,} | Freq Resolution: {freq_resolution:.2f} Hz', 
+                        fontsize=12, y=0.995)
+        else:
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
+            
+            ax1.plot(frequencies / 1000, mag_left, linewidth=0.5)
+            ax1.set_xlabel('Frequency (kHz)')
+            ax1.set_ylabel('Magnitude (dB)')
+            freq_resolution = sample_rate / fft_size
+            ax1.set_title(f'FFT Analysis: {segment_file.name} | FFT Size: {fft_size:,} | Freq Resolution: {freq_resolution:.2f} Hz')
+            ax1.grid(True, alpha=0.3)
+            ax1.set_xlim([0, frequencies[-1] / 1000])
+            
+            ax2.plot(frequencies[high_freq_mask] / 1000, mag_left[high_freq_mask],
+                    linewidth=1)
+            ax2.set_xlabel('Frequency (kHz)')
+            ax2.set_ylabel('Magnitude (dB)')
+            ax2.set_title('High Frequency Region (15kHz+)')
+            ax2.grid(True, alpha=0.3)
+            ax2.axvline(x=17, color='gray', linestyle='--', alpha=0.5, label='17kHz threshold')
+            if 'left' in highlight_spikes:
+                spike_freq, spike_amp = highlight_spikes['left']
+                ax2.plot(spike_freq / 1000, spike_amp, 'ro', markersize=10,
+                        label=f'Spike: {spike_freq/1000:.2f}kHz, {spike_amp:.2f}dB')
+            ax2.legend()
+        
+        plt.tight_layout()
+        plot_file = analysis_dir / f"{segment_file.stem}_fft.png"
+        plt.savefig(str(plot_file), dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        return {
+            'segment_idx': segment_idx,
+            'segment_name': segment_file.name,
+            'sample_rate': sample_rate,
+            'is_stereo': is_stereo,
+            'max_frequency': frequencies[-1],
+            'spikes': spikes_found,
+            'plot_file': plot_file.name
+        }
 
-            # Detect spike in right channel if stereo
-            if is_stereo:
-                spike_detected_right, peak_freq_right, peak_amp_right = self.detect_spike_above_17khz(
-                    frequencies, mag_right
-                )
+    def analyze_segments(self, segment_files):
+        """Analyze all audio segments for high-frequency spikes using parallel processing."""
+        print("\n" + "="*60)
+        print("Analyzing segments for high-frequency spikes...")
+        print(f"Using parallel processing with {os.cpu_count()} CPU cores")
+        print("="*60 + "\n")
 
-                if spike_detected_right:
-                    print(f"  ✓ SPIKE DETECTED (Right): {peak_freq_right/1000:.2f} kHz at {peak_amp_right:.2f} dB")
-                    self.spikes_detected.append({
-                        'segment': segment_file.name,
-                        'segment_index': segment_idx,
-                        'time_seconds': segment_time,
-                        'channel': 'right',
-                        'frequency_hz': float(peak_freq_right),
-                        'frequency_khz': float(peak_freq_right / 1000),
-                        'amplitude_db': float(peak_amp_right)
-                    })
-                    highlight_spikes['right'] = (peak_freq_right, peak_amp_right)
-
-            if not spike_detected_left and (not is_stereo or not spike_detected_right):
-                if is_stereo and not (spike_detected_left or spike_detected_right):
-                    print(f"  No significant spikes above 17kHz in either channel")
-                elif not is_stereo:
-                    print(f"  No significant spike above 17kHz")
-
-            # Create plot
-            self.plot_fft(frequencies, mag_left, mag_right, segment_file,
-                         is_stereo, highlight_spikes if highlight_spikes else None)
-            print()
+        total_segments = len(segment_files)
+        completed = 0
+        
+        # Process segments in parallel
+        results = []
+        with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+            # Submit all tasks
+            future_to_segment = {
+                executor.submit(
+                    self.process_segment_worker,
+                    str(segment_file),
+                    idx,
+                    self.segment_duration,
+                    self.fft_size,
+                    self.spike_threshold_db,
+                    str(self.analysis_dir),
+                    self.use_prominence
+                ): (idx, segment_file) for idx, segment_file in enumerate(segment_files)
+            }
+            
+            # Process completed tasks as they finish
+            for future in as_completed(future_to_segment):
+                idx, segment_file = future_to_segment[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    completed += 1
+                    
+                    if self.verbose:
+                        # Print detailed progress
+                        print(f"Processed: {result['segment_name']}")
+                        print(f"  Sample rate: {result['sample_rate']} Hz")
+                        print(f"  Channels: {'Stereo' if result['is_stereo'] else 'Mono'}")
+                        print(f"  Max frequency analyzed: {result['max_frequency']/1000:.2f} kHz")
+                        
+                        if result['spikes']:
+                            for spike in result['spikes']:
+                                channel_label = spike['channel'].capitalize()
+                                print(f"  ✓ SPIKE DETECTED ({channel_label}): "
+                                      f"{spike['frequency_khz']:.2f} kHz at {spike['amplitude_db']:.2f} dB")
+                        else:
+                            if result['is_stereo']:
+                                print(f"  No significant spikes above 17kHz in either channel")
+                            else:
+                                print(f"  No significant spike above 17kHz")
+                        
+                        print(f"  Saved FFT plot: {result['plot_file']}")
+                        print()
+                    else:
+                        # Simple progress counter
+                        print(f"\rCompleted: {completed}/{total_segments}", end='', flush=True)
+                    
+                except Exception as e:
+                    completed += 1
+                    if self.verbose:
+                        print(f"Error processing {segment_file.name}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                    else:
+                        print(f"\rCompleted: {completed}/{total_segments} (1 error)", end='', flush=True)
+        
+        if not self.verbose:
+            print()  # New line after progress counter
+        
+        # Sort results by segment index and collect spikes
+        results.sort(key=lambda x: x['segment_idx'])
+        for result in results:
+            self.spikes_detected.extend(result['spikes'])
 
     def generate_report(self):
         """Generate a summary report of detected spikes."""
-        print("\n" + "="*60)
-        print("SPIKE DETECTION REPORT")
-        print("="*60 + "\n")
+        if self.verbose:
+            print("\n" + "="*60)
+            print("SPIKE DETECTION REPORT")
+            print("="*60 + "\n")
 
-        if not self.spikes_detected:
-            print("No noticeable spikes detected above 17kHz in any segment.")
+            if not self.spikes_detected:
+                print("No noticeable spikes detected above 17kHz in any segment.")
+            else:
+                print(f"Found {len(self.spikes_detected)} spike(s) across all segments:\n")
+                for i, spike in enumerate(self.spikes_detected, 1):
+                    print(f"{i}. {spike['segment']} ({spike['channel'].upper()})")
+                    print(f"   Frequency: {spike['frequency_khz']:.2f} kHz ({spike['frequency_hz']:.0f} Hz)")
+                    print(f"   Amplitude: {spike['amplitude_db']:.2f} dB")
+                    print()
         else:
-            print(f"Found {len(self.spikes_detected)} spike(s) across all segments:\n")
-            for i, spike in enumerate(self.spikes_detected, 1):
-                print(f"{i}. {spike['segment']} ({spike['channel'].upper()})")
-                print(f"   Frequency: {spike['frequency_khz']:.2f} kHz ({spike['frequency_hz']:.0f} Hz)")
-                print(f"   Amplitude: {spike['amplitude_db']:.2f} dB")
-                print()
+            # Brief summary in non-verbose mode
+            print(f"\nFound {len(self.spikes_detected)} spike(s) above 17kHz")
 
         # Save report to JSON
         report_file = self.analysis_dir / f"{self.input_file.stem}_spike_report.json"
@@ -624,6 +941,16 @@ Examples:
         default=65536,
         metavar='SIZE',
         help='FFT size for frequency analysis (default: 65536)')
+    
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Show detailed per-segment output')
+    
+    parser.add_argument(
+        '--absolute-amplitude',
+        action='store_true',
+        help='Use absolute amplitude detection instead of prominence-based detection')
 
     args = parser.parse_args()
 
@@ -632,7 +959,9 @@ Examples:
             args.input_file,
             args.output_dir,
             args.spike_threshold,
-            args.fft_size)
+            args.fft_size,
+            args.verbose,
+            use_prominence=not args.absolute_amplitude)
         analyzer.run()
     except Exception as e:
         print(f"Error: {e}")
