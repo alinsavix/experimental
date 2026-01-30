@@ -1,0 +1,13 @@
+applications:
+  - name: Notepad
+    path: C:\Windows\System32\notepad.exe
+    iconPath: C:\Windows\System32\notepad.exe
+  - name: Calculator
+    path: C:\Windows\System32\calc.exe
+    iconPath: C:\Windows\System32\calc.exe
+  - name: Paint
+    path: C:\Windows\System32\mspaint.exe
+    iconPath: C:\Windows\System32\mspaint.exe
+  - name: Command Prompt
+    path: C:\Windows\System32\cmd.exe
+    iconPath: C:\Windows\System32\cmd.exe
