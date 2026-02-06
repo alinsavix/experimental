@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chalibrate"
+version = "0.0.0"
+description = "ChArUco Camera Calibration Application with GUI and CLI"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "GNU General Public License v3 (GPLv3)"}
+authors = [
+    {name = "TDV Alinsa", email = "alinsa-github@lupine.org"}
+]
+keywords = ["camera", "calibration", "charuco", "opencv", "computer-vision"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics :: Capture",
+]
+
+dependencies = [
+    "opencv-contrib-python>=4.8.0",
+    "PyQt6>=6.6.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+]
+
+[project.scripts]
+chalibrate = "chalibrate.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
