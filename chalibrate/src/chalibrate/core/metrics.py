@@ -8,11 +8,11 @@ from .calibrator import CalibrationResult, ImageDetection
 class ImageQuality(Enum):
     """Image quality classification based on reprojection error."""
 
-    EXCELLENT = ("Excellent", 0.0, 0.3, (0, 200, 0))  # Green
+    EXCELLENT = ("Excellent", 0.0, 0.3, (0, 200, 0))  # Green - BGR format
     GOOD = ("Good", 0.3, 0.5, (0, 150, 0))  # Dark green
-    ACCEPTABLE = ("Acceptable", 0.5, 1.0, (200, 200, 0))  # Yellow
-    POOR = ("Poor", 1.0, 2.0, (255, 140, 0))  # Orange
-    BAD = ("Bad", 2.0, float('inf'), (200, 0, 0))  # Red
+    ACCEPTABLE = ("Acceptable", 0.5, 1.0, (0, 200, 200))  # Yellow (was cyan by mistake)
+    POOR = ("Poor", 1.0, 2.0, (0, 140, 255))  # Orange (was backwards)
+    BAD = ("Bad", 2.0, float('inf'), (0, 0, 200))  # Red
     NOT_CALIBRATED = ("Not calibrated", 0.0, 0.0, (128, 128, 128))  # Gray
 
     def __init__(self, label: str, min_error: float, max_error: float, color: tuple):

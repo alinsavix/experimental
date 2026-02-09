@@ -1,11 +1,14 @@
 """Camera calibration using ChArUco boards."""
 
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Callable
+from typing import List, Tuple, Optional, Callable, TYPE_CHECKING
 import numpy as np
 import cv2
 
 from .board_config import BoardConfig
+
+if TYPE_CHECKING:
+    from .image_quality import QualityReport
 
 
 @dataclass
@@ -20,6 +23,9 @@ class ImageDetection:
     marker_ids: Optional[np.ndarray]  # ArUco marker IDs
     reprojection_error: float = 0.0  # Per-image error (set after calibration)
     excluded: bool = False  # Whether to exclude from calibration
+    quality_report: Optional['QualityReport'] = None  # Image quality analysis
+    auto_excluded: bool = False  # Whether automatically excluded for quality
+    exclusion_reason: str = ""  # Reason for exclusion
 
     @property
     def has_detection(self) -> bool:
@@ -121,17 +127,82 @@ class CalibrationResult:
 class Calibrator:
     """Camera calibration using ChArUco boards."""
 
-    def __init__(self, board_config: BoardConfig):
+    def __init__(self, board_config: BoardConfig, options: Optional['CalibrationOptions'] = None):
         """Initialize calibrator.
 
         Args:
             board_config: ChArUco board configuration
+            options: Calibration accuracy options (defaults to CalibrationOptions())
         """
+        from .calibration_options import CalibrationOptions
+        from .image_quality import ImageQualityAnalyzer
+
         self.board_config = board_config
         self.board = board_config.create_board()
         self.dictionary = board_config.get_dictionary()
-        self.detector_params = cv2.aruco.DetectorParameters()
+        self.options = options if options is not None else CalibrationOptions()
+        self.quality_analyzer = ImageQualityAnalyzer(
+            blur_threshold=self.options.blur_threshold,
+            brightness_min=self.options.brightness_min,
+            brightness_max=self.options.brightness_max,
+        )
+        self.detector_params = self._configure_detector_params()
         self.detector = cv2.aruco.ArucoDetector(self.dictionary, self.detector_params)
+
+    def _configure_detector_params(self) -> cv2.aruco.DetectorParameters:
+        """Configure ArUco detector parameters from options.
+
+        Returns:
+            Configured DetectorParameters
+        """
+        params = cv2.aruco.DetectorParameters()
+        params.adaptiveThreshWinSizeMin = self.options.adaptive_thresh_win_size_min
+        params.adaptiveThreshWinSizeMax = self.options.adaptive_thresh_win_size_max
+        params.adaptiveThreshWinSizeStep = self.options.adaptive_thresh_win_size_step
+        params.adaptiveThreshConstant = self.options.adaptive_thresh_constant
+        params.cornerRefinementMethod = self.options.corner_refinement_method
+        return params
+
+    def _preprocess_image(self, gray: np.ndarray) -> np.ndarray:
+        """Apply preprocessing to grayscale image.
+
+        Args:
+            gray: Grayscale input image
+
+        Returns:
+            Preprocessed grayscale image
+        """
+        if self.options.enable_clahe:
+            clahe = cv2.createCLAHE(
+                clipLimit=self.options.clahe_clip_limit,
+                tileGridSize=self.options.clahe_tile_size
+            )
+            return clahe.apply(gray)
+        return gray
+
+    def _refine_corners_subpixel(
+        self,
+        gray: np.ndarray,
+        corners: np.ndarray
+    ) -> np.ndarray:
+        """Refine corner positions to subpixel accuracy.
+
+        Args:
+            gray: Grayscale image
+            corners: Detected corner positions (Nx1x2 array)
+
+        Returns:
+            Refined corner positions
+        """
+        criteria = self.options.get_subpixel_criteria()
+        refined = cv2.cornerSubPix(
+            gray,
+            corners,
+            self.options.subpixel_window_size,
+            (-1, -1),  # No zero zone
+            criteria
+        )
+        return refined
 
     def detect_boards(
         self,
@@ -156,8 +227,11 @@ class Calibrator:
             # Convert to grayscale
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
+            # Apply preprocessing if enabled
+            processed_gray = self._preprocess_image(gray)
+
             # Detect ArUco markers
-            marker_corners, marker_ids, _ = self.detector.detectMarkers(gray)
+            marker_corners, marker_ids, _ = self.detector.detectMarkers(processed_gray)
 
             charuco_corners = None
             charuco_ids = None
@@ -165,10 +239,24 @@ class Calibrator:
             # Interpolate ChArUco corners if markers found
             if marker_ids is not None and len(marker_ids) > 0:
                 result = cv2.aruco.interpolateCornersCharuco(
-                    marker_corners, marker_ids, gray, self.board
+                    marker_corners, marker_ids, processed_gray, self.board
                 )
                 if result[0] is not None and result[0] > 0:
                     charuco_corners, charuco_ids = result[1], result[2]
+
+                    # Apply subpixel refinement if enabled
+                    if self.options.enable_subpixel and charuco_corners is not None:
+                        charuco_corners = self._refine_corners_subpixel(processed_gray, charuco_corners)
+
+            # Always analyze image quality (for display purposes)
+            quality_report = self.quality_analyzer.analyze_image(gray)
+
+            # Only exclude based on quality if filtering is enabled
+            auto_excluded = False
+            exclusion_reason = ""
+            if self.options.enable_quality_filter and not quality_report.passes:
+                auto_excluded = True
+                exclusion_reason = quality_report.status_text
 
             detection = ImageDetection(
                 image_path=path,
@@ -177,6 +265,10 @@ class Calibrator:
                 charuco_ids=charuco_ids,
                 marker_corners=marker_corners,
                 marker_ids=marker_ids,
+                quality_report=quality_report,
+                auto_excluded=auto_excluded,
+                exclusion_reason=exclusion_reason,
+                excluded=auto_excluded,  # Auto-exclude poor quality images
             )
             detections.append(detection)
 
@@ -226,7 +318,8 @@ class Calibrator:
             self.board,
             image_size,
             None,
-            None
+            None,
+            flags=self.options.get_calibration_flags()
         )
 
         # Calculate per-image reprojection errors
@@ -257,6 +350,91 @@ class Calibrator:
             image_size=image_size,
             detections=detections,
         )
+
+    def _identify_outliers(
+        self,
+        detections: List[ImageDetection],
+        use_percentile: bool = True
+    ) -> List[ImageDetection]:
+        """Identify outlier detections based on reprojection error.
+
+        Args:
+            detections: List of all detections
+            use_percentile: Use percentile threshold (vs median + multiplier)
+
+        Returns:
+            List of outlier detections
+        """
+        # Get valid detections with reprojection errors
+        valid_detections = [
+            d for d in detections
+            if d.has_detection and not d.excluded and d.reprojection_error > 0
+        ]
+
+        if len(valid_detections) < 3:
+            return []
+
+        errors = np.array([d.reprojection_error for d in valid_detections])
+
+        if use_percentile:
+            threshold = np.percentile(errors, self.options.outlier_percentile)
+        else:
+            median = np.median(errors)
+            threshold = median * self.options.outlier_multiplier
+
+        outliers = [d for d in valid_detections if d.reprojection_error > threshold]
+        return outliers
+
+    def calibrate_with_refinement(
+        self,
+        detections: List[ImageDetection],
+        image_size: Tuple[int, int]
+    ) -> CalibrationResult:
+        """Perform calibration with iterative outlier removal.
+
+        Args:
+            detections: List of image detections
+            image_size: Image size (width, height)
+
+        Returns:
+            CalibrationResult object
+
+        Raises:
+            ValueError: If insufficient valid detections
+        """
+        if not self.options.enable_iterative_refinement:
+            return self.calibrate(detections, image_size)
+
+        iteration = 0
+        while iteration < self.options.max_refinement_iterations:
+            # Run calibration
+            result = self.calibrate(detections, image_size)
+
+            # Count valid detections
+            valid_count = sum(1 for d in detections if d.has_detection and not d.excluded)
+
+            # Identify outliers
+            outliers = self._identify_outliers(detections)
+
+            if not outliers:
+                # No outliers found, we're done
+                break
+
+            # Check if we'd have enough images after removing outliers
+            if valid_count - len(outliers) < self.options.min_images_after_outliers:
+                # Would have too few images, stop here
+                break
+
+            # Mark outliers as excluded
+            for outlier in outliers:
+                outlier.excluded = True
+                outlier.auto_excluded = True
+                outlier.exclusion_reason = f"High reprojection error: {outlier.reprojection_error:.3f}px (iteration {iteration + 1})"
+
+            iteration += 1
+
+        # Final calibration with outliers excluded
+        return self.calibrate(detections, image_size)
 
     def draw_detection(self, detection: ImageDetection) -> np.ndarray:
         """Draw detected ChArUco corners on image.

@@ -121,3 +121,81 @@ class CLIFormatter:
         """
         import sys
         print(f"WARNING: {message}", file=sys.stderr)
+
+    @staticmethod
+    def print_options_summary(options):
+        """Print summary of calibration options being used.
+
+        Args:
+            options: CalibrationOptions instance
+        """
+        print("\nCalibration Options:")
+
+        # Subpixel refinement
+        if options.enable_subpixel:
+            print(f"  ✓ Subpixel corner refinement (window: {options.subpixel_window_size[0]}x{options.subpixel_window_size[0]})")
+        else:
+            print("  ✗ Subpixel refinement disabled")
+
+        # Quality filtering
+        if options.enable_quality_filter:
+            print(f"  ✓ Image quality filtering (blur: {options.blur_threshold}, brightness: {options.brightness_min}-{options.brightness_max})")
+        else:
+            print("  ✗ Quality filtering disabled")
+
+        # Calibration flags
+        flags = []
+        if options.use_rational_model:
+            flags.append("rational model")
+        if options.use_thin_prism:
+            flags.append("thin prism")
+        if options.fix_principal_point:
+            flags.append("fixed principal point")
+        if options.fix_aspect_ratio:
+            flags.append("fixed aspect ratio")
+
+        if flags:
+            print(f"  ✓ Calibration flags: {', '.join(flags)}")
+
+        # Iterative refinement
+        if options.enable_iterative_refinement:
+            print(f"  ✓ Iterative outlier removal (max {options.max_refinement_iterations} iterations, {options.outlier_percentile}th percentile)")
+        else:
+            print("  ✗ Iterative refinement disabled")
+
+        # Preprocessing
+        if options.enable_clahe:
+            print(f"  ✓ CLAHE preprocessing (clip: {options.clahe_clip_limit}, tiles: {options.clahe_tile_size[0]}x{options.clahe_tile_size[0]})")
+
+    @staticmethod
+    def print_quality_summary(detections: List):
+        """Print summary of image quality analysis.
+
+        Args:
+            detections: List of ImageDetection objects
+        """
+        total = len(detections)
+        with_quality = sum(1 for d in detections if d.quality_report is not None)
+
+        if with_quality == 0:
+            return
+
+        print("\nImage Quality Summary:")
+        passed = sum(1 for d in detections if d.quality_report and d.quality_report.passes)
+        auto_excluded = sum(1 for d in detections if d.auto_excluded)
+
+        print(f"  Analyzed: {with_quality} images")
+        print(f"  Passed quality checks: {passed}")
+        print(f"  Auto-excluded (poor quality): {auto_excluded}")
+
+        if auto_excluded > 0:
+            # Show reasons
+            issues = {}
+            for d in detections:
+                if d.auto_excluded and d.quality_report:
+                    for issue in d.quality_report.issues:
+                        issues[issue] = issues.get(issue, 0) + 1
+
+            print("  Exclusion reasons:")
+            for issue, count in issues.items():
+                print(f"    - {issue}: {count} images")

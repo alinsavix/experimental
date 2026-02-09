@@ -36,6 +36,8 @@ class ImageThumbnail(QFrame):
         self.quality = ImageQuality.NOT_CALIBRATED
         self.excluded = False
         self.reprojection_error = -1.0
+        self.quality_report = None  # QualityReport from image analysis
+        self.detection = None  # ImageDetection object
 
         self.setFrameStyle(QFrame.Shape.Box)
         self.setLineWidth(3)
@@ -77,16 +79,27 @@ class ImageThumbnail(QFrame):
 
         # Apply excluded overlay if needed
         if self.excluded:
-            # Semi-transparent gray overlay
+            # Slight desaturation (less than before)
             overlay = thumbnail.copy()
             gray = cv2.cvtColor(overlay, cv2.COLOR_BGR2GRAY)
             gray = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-            thumbnail = cv2.addWeighted(thumbnail, 0.3, gray, 0.7, 0)
+            thumbnail = cv2.addWeighted(thumbnail, 0.7, gray, 0.3, 0)
 
-            # Draw red X
+            # Draw small red X in top-right corner
             h, w = thumbnail.shape[:2]
-            cv2.line(thumbnail, (10, 10), (w-10, h-10), (0, 0, 255), 3)
-            cv2.line(thumbnail, (w-10, 10), (10, h-10), (0, 0, 255), 3)
+            x_size = 30  # Size of the X
+            x_offset = w - x_size - 5  # 5px from right edge
+            y_offset = 5  # 5px from top edge
+
+            # Draw X with background circle for visibility
+            center_x = x_offset + x_size // 2
+            center_y = y_offset + x_size // 2
+            cv2.circle(thumbnail, (center_x, center_y), x_size // 2, (255, 255, 255), -1)  # White background
+            cv2.circle(thumbnail, (center_x, center_y), x_size // 2, (0, 0, 255), 2)  # Red border
+
+            # Draw the X
+            cv2.line(thumbnail, (x_offset, y_offset), (x_offset + x_size, y_offset + x_size), (0, 0, 255), 3)
+            cv2.line(thumbnail, (x_offset + x_size, y_offset), (x_offset, y_offset + x_size), (0, 0, 255), 3)
 
         # Convert to QPixmap
         # Ensure contiguous memory layout
@@ -105,19 +118,77 @@ class ImageThumbnail(QFrame):
 
     def _update_status_label(self):
         """Update status label text (reprojection error or status)."""
+        # Build tooltip with quality info if available
+        if self.quality_report is not None:
+            blur_score = self.quality_report.blur_score
+            brightness = self.quality_report.brightness_mean
+            tooltip = f"Blur Score: {blur_score:.1f}\nBrightness: {brightness:.1f}"
+            if self.quality_report.issues:
+                tooltip += "\n\nQuality Issues:\n" + "\n".join(f"• {issue}" for issue in self.quality_report.issues)
+            else:
+                tooltip += "\n\n✓ Quality checks passed"
+
+            # Add reprojection error to tooltip if available
+            if self.reprojection_error > 0:
+                tooltip = f"Reprojection Error: {self.reprojection_error:.3f} px\n\n" + tooltip
+
+            self.setToolTip(tooltip)
+
+        # Update status label based on state
         if self.excluded:
-            self.status_label.setText("EXCLUDED")
-            self.status_label.setStyleSheet("font-size: 10px; color: red; font-weight: bold;")
+            # Show blur score with excluded status, highlighting what's out of range
+            if self.quality_report is not None:
+                blur_score = self.quality_report.blur_score
+                brightness = self.quality_report.brightness_mean
+
+                # Mark which values are out of range
+                blur_text = f"Blur: {blur_score:.1f}"
+                if self.quality_report.is_blurry:
+                    blur_text = f"❌{blur_text}"
+
+                bright_text = f"Bright: {brightness:.0f}"
+                if self.quality_report.is_too_dark:
+                    bright_text = f"❌{bright_text} (too dark)"
+                elif self.quality_report.is_too_bright:
+                    bright_text = f"❌{bright_text} (too bright)"
+
+                self.status_label.setText(f"EXCLUDED\n{blur_text} | {bright_text}")
+                self.status_label.setStyleSheet("font-size: 8px; color: red; font-weight: bold;")
+            else:
+                self.status_label.setText("EXCLUDED")
+                self.status_label.setStyleSheet("font-size: 10px; color: red; font-weight: bold;")
         elif self.reprojection_error > 0:
+            # Show reprojection error after calibration
             self.status_label.setText(f"{self.reprojection_error:.3f} px")
             self.status_label.setStyleSheet("font-size: 11px; font-weight: bold;")
         elif self.reprojection_error == -1.0:
-            # Failed detection after calibration attempted
-            self.status_label.setText("NO DETECTION")
-            self.status_label.setStyleSheet("font-size: 10px; color: red; font-weight: bold;")
+            # Failed detection - still show blur score if available
+            if self.quality_report is not None:
+                blur_score = self.quality_report.blur_score
+                brightness = self.quality_report.brightness_mean
+                self.status_label.setText(f"NO DETECTION\nBlur: {blur_score:.1f} | Bright: {brightness:.0f}")
+                self.status_label.setStyleSheet("font-size: 8px; color: red; font-weight: bold;")
+            else:
+                self.status_label.setText("NO DETECTION")
+                self.status_label.setStyleSheet("font-size: 10px; color: red; font-weight: bold;")
+        elif self.quality_report is not None:
+            # Show blur score before calibration
+            blur_score = self.quality_report.blur_score
+            brightness = self.quality_report.brightness_mean
+
+            # Color code based on quality
+            if self.quality_report.passes:
+                color = "#008800"  # Green
+                status = "✓"
+            else:
+                color = "#CC6600"  # Orange
+                status = "⚠"
+
+            self.status_label.setText(f"{status} Blur: {blur_score:.1f} | Bright: {brightness:.0f}")
+            self.status_label.setStyleSheet(f"font-size: 9px; color: {color};")
         else:
-            # Not yet calibrated
-            self.status_label.setText("Not calibrated")
+            # Not yet analyzed
+            self.status_label.setText("Not analyzed")
             self.status_label.setStyleSheet("font-size: 9px; color: #999;")
 
     def _update_border(self):
@@ -240,12 +311,30 @@ class ImageGrid(QWidget):
 
         for i, detection in enumerate(detections):
             if i < len(self.thumbnails):
+                thumbnail = self.thumbnails[i]
+
+                # Store detection and quality report
+                thumbnail.detection = detection
+                thumbnail.quality_report = detection.quality_report
+
+                # Update exclusion status
+                if detection.excluded:
+                    thumbnail.set_excluded(True)
+
+                # Update display based on state
                 if detection.reprojection_error > 0:
+                    # After calibration - show error
                     quality = ImageQuality.from_error(detection.reprojection_error)
-                    self.thumbnails[i].update_quality(detection.reprojection_error, quality)
-                elif not detection.has_detection or (detection.charuco_corners is not None and len(detection.charuco_corners) < 4):
-                    # Mark as failed if no detection or too few corners
-                    self.thumbnails[i].mark_as_failed()
+                    thumbnail.update_quality(detection.reprojection_error, quality)
+                else:
+                    # Before/during calibration - always update to show quality or detection status
+                    # This handles both successful detections and failed detections
+                    if not detection.has_detection or (detection.charuco_corners is not None and len(detection.charuco_corners) < 4):
+                        # Mark as failed if no detection or too few corners
+                        thumbnail.mark_as_failed()
+
+                    # Always call update to show quality info
+                    thumbnail._update_status_label()
 
                 if detection.excluded:
                     self.thumbnails[i].set_excluded(True)

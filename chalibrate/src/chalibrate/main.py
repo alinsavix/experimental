@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from .core import BoardConfig, Calibrator
+from .core.calibration_options import CalibrationOptions
 from .utils import ImageLoader
 from .cli import CLIFormatter
 
@@ -93,6 +94,92 @@ Examples:
         '--quiet',
         action='store_true',
         help='Minimal output (CLI mode only)'
+    )
+
+    # Advanced calibration options
+    advanced_group = parser.add_argument_group('Advanced Calibration Options')
+
+    # Preset
+    advanced_group.add_argument(
+        '--preset',
+        type=str,
+        choices=['default', 'high_accuracy', 'fast', 'fisheye', 'webcam'],
+        help='Use a preset configuration (overrides other advanced options)'
+    )
+
+    # Subpixel refinement
+    advanced_group.add_argument(
+        '--no-subpixel',
+        action='store_true',
+        help='Disable subpixel corner refinement'
+    )
+
+    # Quality filtering
+    advanced_group.add_argument(
+        '--no-quality-filter',
+        action='store_true',
+        help='Disable automatic image quality filtering'
+    )
+    advanced_group.add_argument(
+        '--blur-threshold',
+        type=float,
+        help='Blur detection threshold (default: 30.0, lower = more permissive)'
+    )
+    advanced_group.add_argument(
+        '--brightness-min',
+        type=float,
+        help='Minimum brightness (default: 30.0)'
+    )
+    advanced_group.add_argument(
+        '--brightness-max',
+        type=float,
+        help='Maximum brightness (default: 225.0)'
+    )
+
+    # Calibration flags
+    advanced_group.add_argument(
+        '--rational-model',
+        action='store_true',
+        help='Use rational distortion model (K4-K6)'
+    )
+    advanced_group.add_argument(
+        '--thin-prism',
+        action='store_true',
+        help='Use thin prism distortion model'
+    )
+    advanced_group.add_argument(
+        '--fix-principal-point',
+        action='store_true',
+        help='Fix principal point at image center'
+    )
+    advanced_group.add_argument(
+        '--fix-aspect-ratio',
+        action='store_true',
+        help='Fix aspect ratio (fx/fy = 1)'
+    )
+
+    # Iterative refinement
+    advanced_group.add_argument(
+        '--iterative-refinement',
+        action='store_true',
+        help='Enable iterative outlier removal'
+    )
+    advanced_group.add_argument(
+        '--max-iterations',
+        type=int,
+        help='Maximum refinement iterations (default: 3)'
+    )
+    advanced_group.add_argument(
+        '--outlier-percentile',
+        type=float,
+        help='Outlier percentile threshold (default: 95.0)'
+    )
+
+    # Preprocessing
+    advanced_group.add_argument(
+        '--clahe',
+        action='store_true',
+        help='Enable CLAHE preprocessing'
     )
 
     return parser.parse_args()
@@ -183,12 +270,52 @@ def run_cli(args):
                 dict_name=args.dict,
             )
 
+        # Create calibration options
+        if args.preset:
+            calibration_options = CalibrationOptions.from_preset(args.preset)
+            if not args.quiet:
+                print(f"Using preset: {args.preset}")
+        else:
+            calibration_options = CalibrationOptions()
+
+            # Apply individual options
+            if args.no_subpixel:
+                calibration_options.enable_subpixel = False
+            if args.no_quality_filter:
+                calibration_options.enable_quality_filter = False
+            if args.blur_threshold is not None:
+                calibration_options.blur_threshold = args.blur_threshold
+            if args.brightness_min is not None:
+                calibration_options.brightness_min = args.brightness_min
+            if args.brightness_max is not None:
+                calibration_options.brightness_max = args.brightness_max
+            if args.rational_model:
+                calibration_options.use_rational_model = True
+            if args.thin_prism:
+                calibration_options.use_thin_prism = True
+            if args.fix_principal_point:
+                calibration_options.fix_principal_point = True
+            if args.fix_aspect_ratio:
+                calibration_options.fix_aspect_ratio = True
+            if args.iterative_refinement:
+                calibration_options.enable_iterative_refinement = True
+            if args.max_iterations is not None:
+                calibration_options.max_refinement_iterations = args.max_iterations
+            if args.outlier_percentile is not None:
+                calibration_options.outlier_percentile = args.outlier_percentile
+            if args.clahe:
+                calibration_options.enable_clahe = True
+
+        # Print options summary if not quiet
+        if not args.quiet:
+            CLIFormatter.print_options_summary(calibration_options)
+
         # Create calibrator
-        calibrator = Calibrator(board_config)
+        calibrator = Calibrator(board_config, calibration_options)
 
         # Detect boards
         if not args.quiet:
-            print("Detecting ChArUco boards...")
+            print("\nDetecting ChArUco boards...")
 
         def progress_callback(current, total, path):
             if not args.quiet:
@@ -199,13 +326,20 @@ def run_cli(args):
         # Print detection summary
         if not args.quiet:
             CLIFormatter.print_detection_summary(detections)
+            if calibration_options.enable_quality_filter:
+                CLIFormatter.print_quality_summary(detections)
 
         # Perform calibration
         if not args.quiet:
             print("\nComputing camera calibration...")
 
         image_size = ImageLoader.get_image_size(images)
-        result = calibrator.calibrate(detections, image_size)
+
+        # Use iterative refinement if enabled
+        if calibration_options.enable_iterative_refinement:
+            result = calibrator.calibrate_with_refinement(detections, image_size)
+        else:
+            result = calibrator.calibrate(detections, image_size)
 
         # Print results
         CLIFormatter.print_results(result, quiet=args.quiet)

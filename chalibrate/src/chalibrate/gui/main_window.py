@@ -11,6 +11,7 @@ from PyQt6.QtGui import QAction
 import numpy as np
 
 from ..core import BoardConfig, CalibrationResult
+from ..core.calibration_options import CalibrationOptions
 from ..utils import ImageLoader
 from .config_dialog import ConfigDialog
 from .image_grid import ImageGrid
@@ -37,6 +38,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1200, 800)
 
         self.board_config: Optional[BoardConfig] = preload_config
+        self.calibration_options = CalibrationOptions()
         self.images: List[Tuple[str, np.ndarray]] = preload_images or []
         self.current_result: Optional[CalibrationResult] = None
         self.thread_pool = QThreadPool.globalInstance()
@@ -111,6 +113,12 @@ class MainWindow(QMainWindow):
         self.config_action.triggered.connect(self._configure_board)
         calib_menu.addAction(self.config_action)
 
+        self.advanced_options_action = QAction("&Advanced Options...", self)
+        self.advanced_options_action.triggered.connect(self._show_advanced_options)
+        calib_menu.addAction(self.advanced_options_action)
+
+        calib_menu.addSeparator()
+
         self.calibrate_action = QAction("&Run Calibration", self)
         self.calibrate_action.setShortcut("Ctrl+R")
         self.calibrate_action.setEnabled(False)
@@ -137,13 +145,27 @@ class MainWindow(QMainWindow):
 
     def _configure_board(self):
         """Show board configuration dialog."""
-        dialog = ConfigDialog(self, self.board_config, self.images if self.images else None)
+        dialog = ConfigDialog(
+            self,
+            self.board_config,
+            self.images if self.images else None,
+            self.calibration_options
+        )
         if dialog.exec():
-            self.board_config = dialog.get_config()
+            self.board_config, self.calibration_options = dialog.get_config_and_options()
             self.statusBar().showMessage(
                 f"Board configured: {self.board_config.squares_x}x{self.board_config.squares_y}"
             )
             self._update_actions()
+
+    def _show_advanced_options(self):
+        """Show advanced calibration options dialog."""
+        from .advanced_options_dialog import AdvancedOptionsDialog
+
+        dialog = AdvancedOptionsDialog(self, self.calibration_options)
+        if dialog.exec():
+            self.calibration_options = dialog.get_options()
+            self.statusBar().showMessage("Advanced calibration options updated")
 
     def _load_images(self):
         """Load images from directory."""
@@ -182,8 +204,9 @@ class MainWindow(QMainWindow):
         self.calibration_panel.reset()
 
         # Create and start worker
-        worker = CalibrationWorker(self.board_config, self.images)
+        worker = CalibrationWorker(self.board_config, self.images, self.calibration_options)
         worker.signals.progress.connect(self._on_calibration_progress)
+        worker.signals.detections_ready.connect(self._on_detections_ready)
         worker.signals.finished.connect(self._on_calibration_finished)
         worker.signals.error.connect(self._on_calibration_error)
 
@@ -217,6 +240,28 @@ class MainWindow(QMainWindow):
         """
         self.calibration_panel.set_progress(percent, message)
         self.statusBar().showMessage(message)
+
+    def _on_detections_ready(self, detections: list):
+        """Handle detection completion (before calibration).
+
+        Updates image grid with quality information.
+
+        Args:
+            detections: List of ImageDetection objects with quality reports
+        """
+        # Update image grid with quality info
+        self.image_grid.set_detections(detections)
+
+        # Count quality metrics
+        total = len(detections)
+        detected = sum(1 for d in detections if d.has_detection)
+        auto_excluded = sum(1 for d in detections if d.auto_excluded)
+
+        status = f"Detected {detected}/{total} boards"
+        if auto_excluded > 0:
+            status += f" ({auto_excluded} auto-excluded)"
+
+        self.statusBar().showMessage(status)
 
     def _on_calibration_finished(self, result: CalibrationResult):
         """Handle calibration completion.
