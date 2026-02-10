@@ -38,6 +38,11 @@ class CalibrationPanel(QWidget):
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         progress_layout.addWidget(self.status_label)
 
+        # Advanced options button
+        self.advanced_options_btn = QPushButton("⚙️ Advanced Options...")
+        self.advanced_options_btn.setToolTip("Configure accuracy features like subpixel refinement and quality filtering")
+        progress_layout.addWidget(self.advanced_options_btn)
+
         self.progress_group.setLayout(progress_layout)
         layout.addWidget(self.progress_group)
 
@@ -126,31 +131,64 @@ class CalibrationPanel(QWidget):
         quality_group.setLayout(quality_layout)
         results_layout.addWidget(quality_group)
 
-        # Action buttons
-        button_layout = QHBoxLayout()
+        # Coverage analysis
+        self.coverage_group = QGroupBox("Spatial Coverage")
+        coverage_layout = QVBoxLayout()
+
+        self.coverage_score_label = QLabel()
+        self.coverage_score_label.setStyleSheet("font-weight: bold;")
+        coverage_layout.addWidget(self.coverage_score_label)
+
+        self.coverage_warnings_label = QLabel()
+        self.coverage_warnings_label.setWordWrap(True)
+        coverage_layout.addWidget(self.coverage_warnings_label)
+
+        self.view_heatmap_btn = QPushButton("📊 View Coverage Heat Map")
+        self.view_heatmap_btn.setToolTip("Show which parts of the frame have corner coverage")
+        self.view_heatmap_btn.clicked.connect(self._show_coverage_heatmap)
+        self.view_heatmap_btn.setEnabled(False)
+        coverage_layout.addWidget(self.view_heatmap_btn)
+
+        self.coverage_group.setLayout(coverage_layout)
+        results_layout.addWidget(self.coverage_group)
+        self.coverage_group.setVisible(False)
+
+        # Action buttons (two rows)
+        button_container = QVBoxLayout()
+        button_container.setSpacing(5)
+
+        # First row: Export and re-calibrate
+        button_row1 = QHBoxLayout()
 
         self.export_json_btn = QPushButton("Export JSON")
         self.export_json_btn.clicked.connect(self._export_json)
         self.export_json_btn.setEnabled(False)
-        button_layout.addWidget(self.export_json_btn)
+        button_row1.addWidget(self.export_json_btn)
 
         self.export_npz_btn = QPushButton("Export NumPy")
         self.export_npz_btn.clicked.connect(self._export_npz)
         self.export_npz_btn.setEnabled(False)
-        button_layout.addWidget(self.export_npz_btn)
+        button_row1.addWidget(self.export_npz_btn)
+
+        button_container.addLayout(button_row1)
+
+        # Second row: Re-calibrate and undistortion
+        button_row2 = QHBoxLayout()
 
         self.recalibrate_btn = QPushButton("Re-calibrate")
-        self.recalibrate_btn.setToolTip("Re-run calibration without excluded images")
+        self.recalibrate_btn.setToolTip("Re-run calibration with current settings")
         self.recalibrate_btn.setEnabled(False)
-        button_layout.addWidget(self.recalibrate_btn)
+        button_row2.addWidget(self.recalibrate_btn)
 
-        self.undistortion_btn = QPushButton("Show Undistortion Preview")
+        self.undistortion_btn = QPushButton("Undistortion Preview")
+        self.undistortion_btn.setToolTip("Show before/after undistortion comparison")
         self.undistortion_btn.clicked.connect(self._show_undistortion_preview)
         self.undistortion_btn.setEnabled(False)
-        button_layout.addWidget(self.undistortion_btn)
+        button_row2.addWidget(self.undistortion_btn)
 
-        button_layout.addStretch()
-        results_layout.addLayout(button_layout)
+        button_container.addLayout(button_row2)
+
+        results_layout.addLayout(button_container)
 
         self.results_group.setLayout(results_layout)
         layout.addWidget(self.results_group)
@@ -219,6 +257,41 @@ class CalibrationPanel(QWidget):
         Bad (&gt;2.0px): {stats['quality_counts']['bad']} ({stats['quality_counts'].get('bad_percent', 0):.1f}%)
         """
         self.stats_label.setText(stats_text)
+
+        # Update coverage analysis
+        if result.coverage_report:
+            cov = result.coverage_report
+
+            # Coverage score with color coding
+            score = cov.quality_score
+            if score >= 80:
+                color = "green"
+            elif score >= 60:
+                color = "orange"
+            else:
+                color = "red"
+
+            score_text = f'<span style="color: {color}; font-size: 14px;">' \
+                        f'{cov.quality_label} ({score:.0f}/100)</span><br>' \
+                        f'Coverage: {cov.coverage_percentage:.0f}% of frame | ' \
+                        f'{cov.num_images_used} images | ' \
+                        f'{cov.total_corners} corners'
+            self.coverage_score_label.setText(score_text)
+
+            # Warnings
+            if cov.warnings:
+                warnings_html = '<span style="color: #CC6600;">⚠ Coverage Issues:</span><br>'
+                warnings_html += '<br>'.join(f'• {w}' for w in cov.warnings)
+                self.coverage_warnings_label.setText(warnings_html)
+            elif not cov.is_adequate:
+                self.coverage_warnings_label.setText('<span style="color: #CC6600;">⚠ Coverage is marginal</span>')
+            else:
+                self.coverage_warnings_label.setText('<span style="color: green;">✓ Good coverage</span>')
+
+            self.coverage_group.setVisible(True)
+            self.view_heatmap_btn.setEnabled(True)
+        else:
+            self.coverage_group.setVisible(False)
 
         # Show results and enable buttons
         self.results_group.setVisible(True)
@@ -306,13 +379,24 @@ class CalibrationPanel(QWidget):
         dialog = UndistortionDialog(self.result, self)
         dialog.exec()
 
+    def _show_coverage_heatmap(self):
+        """Show coverage heat map dialog."""
+        if not self.result or not self.result.coverage_report:
+            return
+
+        from .coverage_heatmap_dialog import CoverageHeatmapDialog
+        dialog = CoverageHeatmapDialog(self.result, self)
+        dialog.exec()
+
     def reset(self):
         """Reset panel to initial state."""
         self.result = None
         self.progress_bar.setValue(0)
         self.status_label.setText("Ready to calibrate")
         self.results_group.setVisible(False)
+        self.coverage_group.setVisible(False)
         self.export_json_btn.setEnabled(False)
         self.export_npz_btn.setEnabled(False)
         self.recalibrate_btn.setEnabled(False)
         self.undistortion_btn.setEnabled(False)
+        self.view_heatmap_btn.setEnabled(False)

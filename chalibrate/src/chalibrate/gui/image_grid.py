@@ -398,3 +398,46 @@ class ImageGrid(QWidget):
 
         self.thumbnails.clear()
         self.detections.clear()
+
+    def sort_by_quality(self):
+        """Reorder thumbnails by calibration quality (best to worst).
+
+        Should be called after calibration completes.
+        """
+        if not self.detections:
+            return
+
+        # Create list of (index, detection, thumbnail) tuples
+        items = list(zip(range(len(self.detections)), self.detections, self.thumbnails))
+
+        # Sort by reprojection error (lower is better)
+        # Put excluded images at the end
+        # Put failed detections after excluded
+        def sort_key(item):
+            idx, detection, thumbnail = item
+            if not detection.has_detection:
+                return (3, 0)  # Failed detections last
+            elif detection.excluded:
+                return (2, detection.reprojection_error if detection.reprojection_error > 0 else 999)  # Excluded second to last
+            elif detection.reprojection_error > 0:
+                return (0, detection.reprojection_error)  # Calibrated, sorted by error (best first)
+            else:
+                return (1, 0)  # Not calibrated yet (shouldn't happen after calibration)
+
+        sorted_items = sorted(items, key=sort_key)
+
+        # Remove all thumbnails from grid
+        for thumbnail in self.thumbnails:
+            self.grid_layout.removeWidget(thumbnail)
+
+        # Re-add in sorted order
+        columns = 4
+        for new_idx, (old_idx, detection, thumbnail) in enumerate(sorted_items):
+            row = new_idx // columns
+            col = new_idx % columns
+            self.grid_layout.addWidget(thumbnail, row, col)
+            thumbnail.index = new_idx  # Update index
+
+        # Update the lists to match new order
+        self.detections = [item[1] for item in sorted_items]
+        self.thumbnails = [item[2] for item in sorted_items]

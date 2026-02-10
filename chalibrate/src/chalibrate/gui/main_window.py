@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
         """
         super().__init__()
         self.setWindowTitle("ChArUco Camera Calibration")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1200, 900)
 
         self.board_config: Optional[BoardConfig] = preload_config
         self.calibration_options = CalibrationOptions()
@@ -71,13 +71,19 @@ class MainWindow(QMainWindow):
         self.image_grid.exclusionChanged.connect(self._on_exclusion_changed)
         splitter.addWidget(self.image_grid)
 
-        # Right: Calibration panel
+        # Right: Calibration panel (fixed width)
         self.calibration_panel = CalibrationPanel()
         self.calibration_panel.recalibrate_btn.clicked.connect(self._recalibrate)
+        self.calibration_panel.advanced_options_btn.clicked.connect(self._show_advanced_options)
+        self.calibration_panel.setMinimumWidth(350)
+        self.calibration_panel.setMaximumWidth(350)
         splitter.addWidget(self.calibration_panel)
 
-        # Set initial splitter sizes (70% images, 30% panel)
-        splitter.setSizes([700, 300])
+        # Set splitter to not be collapsible and give image grid all remaining space
+        splitter.setCollapsible(0, False)  # Image grid not collapsible
+        splitter.setCollapsible(1, False)  # Panel not collapsible
+        splitter.setStretchFactor(0, 1)  # Image grid stretches
+        splitter.setStretchFactor(1, 0)  # Panel fixed
 
         layout.addWidget(splitter)
         central_widget.setLayout(layout)
@@ -113,10 +119,6 @@ class MainWindow(QMainWindow):
         self.config_action.triggered.connect(self._configure_board)
         calib_menu.addAction(self.config_action)
 
-        self.advanced_options_action = QAction("&Advanced Options...", self)
-        self.advanced_options_action.triggered.connect(self._show_advanced_options)
-        calib_menu.addAction(self.advanced_options_action)
-
         calib_menu.addSeparator()
 
         self.calibrate_action = QAction("&Run Calibration", self)
@@ -148,11 +150,10 @@ class MainWindow(QMainWindow):
         dialog = ConfigDialog(
             self,
             self.board_config,
-            self.images if self.images else None,
-            self.calibration_options
+            self.images if self.images else None
         )
         if dialog.exec():
-            self.board_config, self.calibration_options = dialog.get_config_and_options()
+            self.board_config = dialog.get_config()
             self.statusBar().showMessage(
                 f"Board configured: {self.board_config.squares_x}x{self.board_config.squares_y}"
             )
@@ -166,6 +167,9 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             self.calibration_options = dialog.get_options()
             self.statusBar().showMessage("Advanced calibration options updated")
+            # Enable re-calibrate if we have a previous result
+            if self.current_result:
+                self.calibration_panel.set_recalibrate_enabled(True)
 
     def _load_images(self):
         """Load images from directory."""
@@ -183,7 +187,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(f"Loaded {len(self.images)} images from {directory}")
                 self._update_actions()
 
-                # Reset calibration panel
+                # Reset calibration results (new images need new calibration)
                 self.calibration_panel.reset()
                 self.current_result = None
 
@@ -214,7 +218,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Calibration started...")
 
     def _recalibrate(self):
-        """Re-run calibration without excluded images."""
+        """Re-run calibration with current settings."""
         if not self.board_config or not self.images:
             return
 
@@ -222,14 +226,15 @@ class MainWindow(QMainWindow):
         self.calibrate_action.setEnabled(False)
         self.calibration_panel.set_recalibrate_enabled(False)
 
-        # Create and start worker (uses existing detections)
-        worker = CalibrationWorker(self.board_config, self.images, recalibrate=True)
+        # Create and start worker with current calibration options
+        worker = CalibrationWorker(self.board_config, self.images, self.calibration_options)
         worker.signals.progress.connect(self._on_calibration_progress)
+        worker.signals.detections_ready.connect(self._on_detections_ready)
         worker.signals.finished.connect(self._on_calibration_finished)
         worker.signals.error.connect(self._on_calibration_error)
 
         self.thread_pool.start(worker)
-        self.statusBar().showMessage("Re-calibrating without excluded images...")
+        self.statusBar().showMessage("Re-calibrating with current settings...")
 
     def _on_calibration_progress(self, percent: int, message: str):
         """Handle calibration progress update.
@@ -275,17 +280,17 @@ class MainWindow(QMainWindow):
         self.calibration_panel.set_result(result)
         self.image_grid.set_detections(result.detections)
 
+        # Sort images by quality (best to worst)
+        self.image_grid.sort_by_quality()
+
         # Update status
         self.statusBar().showMessage(
-            f"Calibration complete - RMS error: {result.rms_error:.4f} pixels"
+            f"Calibration complete - RMS error: {result.rms_error:.4f} pixels (sorted best to worst)"
         )
 
-        # Re-enable calibration
+        # Re-enable calibration and re-calibrate buttons
         self.calibrate_action.setEnabled(True)
-
-        # Enable re-calibrate if there are excluded images
-        excluded_count = self.image_grid.get_excluded_count()
-        self.calibration_panel.set_recalibrate_enabled(excluded_count > 0)
+        self.calibration_panel.set_recalibrate_enabled(True)
 
     def _on_calibration_error(self, error_message: str):
         """Handle calibration error.
@@ -328,5 +333,11 @@ class MainWindow(QMainWindow):
         from .image_viewer import ImageViewer
 
         detection = self.current_result.detections[index]
-        viewer = ImageViewer(detection, self.current_result, self.board_config, self)
+        viewer = ImageViewer(
+            detection,
+            self.current_result,
+            self.board_config,
+            self.calibration_options,
+            self
+        )
         viewer.exec()

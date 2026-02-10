@@ -2,33 +2,50 @@
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget,
-    QWidget, QScrollArea, QPushButton, QSlider
+    QWidget, QPushButton, QSlider, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QImage, QWheelEvent
+from PyQt6.QtGui import QPixmap, QImage, QWheelEvent, QTransform, QPainter
 import cv2
 import numpy as np
 
 from ..core import ImageDetection, CalibrationResult, Calibrator
 
 
-class ZoomableImageLabel(QLabel):
-    """Label that displays an image and supports zooming."""
+class ZoomableImageView(QGraphicsView):
+    """High-performance image view with smooth zooming and panning."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.original_pixmap = None
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+        self.pixmap_item = None
         self.zoom_factor = 1.0
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Enable smooth scrolling and rendering
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        # Optimize for performance
+        self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing, True)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
     def set_image(self, pixmap: QPixmap):
         """Set the image to display.
 
         Args:
-            pixmap: Original image pixmap
+            pixmap: Image pixmap
         """
-        self.original_pixmap = pixmap
-        self.update_display()
+        self.scene.clear()
+        self.pixmap_item = QGraphicsPixmapItem(pixmap)
+        self.scene.addItem(self.pixmap_item)
+        self.scene.setSceneRect(self.pixmap_item.boundingRect())
+        self.zoom_factor = 1.0
+        self.resetTransform()
 
     def set_zoom(self, zoom_factor: float):
         """Set the zoom factor.
@@ -36,26 +53,59 @@ class ZoomableImageLabel(QLabel):
         Args:
             zoom_factor: Zoom level (1.0 = 100%, 2.0 = 200%, etc.)
         """
-        self.zoom_factor = max(0.1, min(zoom_factor, 10.0))
-        self.update_display()
-
-    def update_display(self):
-        """Update the displayed image based on current zoom."""
-        if self.original_pixmap is None:
+        if self.pixmap_item is None:
             return
 
-        if abs(self.zoom_factor - 1.0) < 0.01:
-            # No zoom, show original
-            self.setPixmap(self.original_pixmap)
+        zoom_factor = max(0.1, min(zoom_factor, 10.0))
+
+        # Calculate scale change
+        scale_change = zoom_factor / self.zoom_factor
+        self.zoom_factor = zoom_factor
+
+        # Apply scale
+        self.scale(scale_change, scale_change)
+
+    def fit_in_view(self):
+        """Fit image to view."""
+        if self.pixmap_item is None:
+            return
+
+        self.fitInView(self.pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+        # Calculate actual zoom factor after fit
+        transform = self.transform()
+        self.zoom_factor = transform.m11()  # Get scale factor from transform matrix
+
+    def reset_zoom(self):
+        """Reset to 100% zoom."""
+        self.resetTransform()
+        self.zoom_factor = 1.0
+
+    def wheelEvent(self, event: QWheelEvent):
+        """Handle mouse wheel for zooming.
+
+        Args:
+            event: Wheel event
+        """
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # Zoom with Ctrl+Wheel
+            delta = event.angleDelta().y()
+            if delta > 0:
+                scale_factor = 1.1
+            else:
+                scale_factor = 0.9
+
+            new_zoom = self.zoom_factor * scale_factor
+            new_zoom = max(0.1, min(new_zoom, 10.0))
+
+            if new_zoom != self.zoom_factor:
+                scale_change = new_zoom / self.zoom_factor
+                self.scale(scale_change, scale_change)
+                self.zoom_factor = new_zoom
+
+            event.accept()
         else:
-            # Scale the pixmap
-            scaled_size = self.original_pixmap.size() * self.zoom_factor
-            scaled_pixmap = self.original_pixmap.scaled(
-                scaled_size,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            )
-            self.setPixmap(scaled_pixmap)
+            # Normal scroll
+            super().wheelEvent(event)
 
 
 class ImageViewer(QDialog):
@@ -66,6 +116,7 @@ class ImageViewer(QDialog):
         detection: ImageDetection,
         result: CalibrationResult,
         board_config,
+        calibration_options=None,
         parent=None
     ):
         """Initialize image viewer.
@@ -74,12 +125,15 @@ class ImageViewer(QDialog):
             detection: Image detection to display
             result: Full calibration result (for undistortion)
             board_config: Board configuration used for calibration
+            calibration_options: Calibration options (for CLAHE preview)
             parent: Parent widget
         """
         super().__init__(parent)
         self.detection = detection
         self.result = result
         self.board_config = board_config
+        self.calibration_options = calibration_options
+        self.last_tab_index = 0  # Track previous tab for position sync
 
         self.setWindowTitle(f"Image Viewer - {detection.image_path}")
         self.setMinimumSize(800, 600)
@@ -116,7 +170,10 @@ class ImageViewer(QDialog):
         self.zoom_slider.setValue(100)  # 100% = 1.0x
         self.zoom_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.zoom_slider.setTickInterval(100)
-        self.zoom_slider.valueChanged.connect(self._on_zoom_slider_changed)
+        # Only update zoom when slider is released (not during drag)
+        self.zoom_slider.sliderReleased.connect(self._on_zoom_slider_released)
+        # Update label while dragging (lightweight)
+        self.zoom_slider.valueChanged.connect(self._on_zoom_slider_value_changed)
         zoom_layout.addWidget(self.zoom_slider)
 
         zoom_in_btn = QPushButton("+")
@@ -149,6 +206,12 @@ class ImageViewer(QDialog):
         original_widget = self._create_image_widget(self.detection.image)
         self.tabs.addTab(original_widget, "Original")
 
+        # CLAHE preprocessed tab (if enabled)
+        if self.calibration_options and self.calibration_options.enable_clahe:
+            clahe_image = self._create_clahe_image()
+            clahe_widget = self._create_image_widget(clahe_image)
+            self.tabs.addTab(clahe_widget, "CLAHE Processed")
+
         # Detection overlay tab
         if self.detection.has_detection:
             detection_image = self._draw_detection()
@@ -167,6 +230,15 @@ class ImageViewer(QDialog):
             error_widget = self._create_image_widget(error_viz)
             self.tabs.addTab(error_widget, "Reprojection Error")
 
+        # Coverage heat map tab
+        if self.result and self.result.coverage_report:
+            coverage_viz = self._create_coverage_visualization()
+            coverage_widget = self._create_image_widget(coverage_viz)
+            self.tabs.addTab(coverage_widget, "Coverage Heat Map")
+
+        # Connect tab change to synchronize zoom/pan
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+
         layout.addWidget(self.tabs)
 
         # Close button
@@ -181,15 +253,53 @@ class ImageViewer(QDialog):
 
         self.setLayout(layout)
 
-        # Store references to image labels for zoom control
-        self.image_labels = []
+        # Store references to image views for zoom control
+        self.image_views = []
         for i in range(self.tabs.count()):
-            tab_widget = self.tabs.widget(i)
-            scroll_area = tab_widget.findChild(QScrollArea)
-            if scroll_area:
-                label = scroll_area.widget()
-                if isinstance(label, ZoomableImageLabel):
-                    self.image_labels.append(label)
+            view = self.tabs.widget(i)
+            if isinstance(view, ZoomableImageView):
+                self.image_views.append(view)
+
+        # Default to "fit to window" for first view
+        if self.image_views:
+            self.image_views[0].fit_in_view()
+            # Update slider to match fitted zoom
+            self.zoom_slider.setValue(int(self.image_views[0].zoom_factor * 100))
+            self.zoom_label.setText(f"{int(self.image_views[0].zoom_factor * 100)}%")
+
+    def _on_tab_changed(self, index: int):
+        """Handle tab change - sync zoom and pan position from previous tab.
+
+        Args:
+            index: New tab index
+        """
+        if index < 0 or not self.image_views:
+            return
+
+        # Get the previous tab's view (the one we're switching FROM)
+        previous_widget = self.tabs.widget(self.last_tab_index)
+        source_view = previous_widget if isinstance(previous_widget, ZoomableImageView) else None
+
+        # Get the new tab's view (the one we're switching TO)
+        target_view = self.tabs.widget(index)
+
+        if not isinstance(target_view, ZoomableImageView):
+            return
+
+        # If we have a source view, copy its state
+        if source_view:
+            # Get the center point in scene coordinates from the source
+            source_center = source_view.mapToScene(source_view.viewport().rect().center())
+
+            # Sync zoom level
+            if abs(target_view.zoom_factor - source_view.zoom_factor) > 0.01:
+                target_view.set_zoom(source_view.zoom_factor)
+
+            # Sync scroll position
+            target_view.centerOn(source_center)
+
+        # Update last tab index for next switch
+        self.last_tab_index = index
 
     def _change_zoom(self, delta: float):
         """Change zoom by a relative amount.
@@ -197,7 +307,13 @@ class ImageViewer(QDialog):
         Args:
             delta: Change in zoom factor
         """
-        current_zoom = self.zoom_slider.value() / 100.0
+        # Get current zoom from the active view
+        current_view = self.tabs.currentWidget()
+        if isinstance(current_view, ZoomableImageView):
+            current_zoom = current_view.zoom_factor
+        else:
+            current_zoom = self.zoom_slider.value() / 100.0
+
         new_zoom = current_zoom + delta
         self._set_zoom(new_zoom)
 
@@ -209,61 +325,70 @@ class ImageViewer(QDialog):
         """
         zoom = max(0.1, min(zoom, 10.0))
         self.zoom_slider.setValue(int(zoom * 100))
+        self.zoom_label.setText(f"{int(zoom * 100)}%")
 
-    def _on_zoom_slider_changed(self, value: int):
-        """Handle zoom slider changes.
+        # Get current view's center point before zooming
+        current_view = self.tabs.currentWidget()
+        if isinstance(current_view, ZoomableImageView):
+            center_point = current_view.mapToScene(current_view.viewport().rect().center())
+        else:
+            center_point = None
+
+        # Apply zoom immediately when set programmatically (not from drag)
+        for view in self.image_views:
+            view.set_zoom(zoom)
+            # Sync center point
+            if center_point:
+                view.centerOn(center_point)
+
+    def _on_zoom_slider_value_changed(self, value: int):
+        """Update zoom label while slider is being dragged (lightweight).
 
         Args:
             value: Slider value (10-1000, representing 10%-1000%)
         """
-        zoom_factor = value / 100.0
         self.zoom_label.setText(f"{value}%")
 
-        # Apply zoom to all image labels
-        for label in self.image_labels:
-            label.set_zoom(zoom_factor)
+    def _on_zoom_slider_released(self):
+        """Apply zoom when slider is released (prevents lag during drag)."""
+        value = self.zoom_slider.value()
+        zoom_factor = value / 100.0
+
+        # Get current view's center point before zooming
+        current_view = self.tabs.currentWidget()
+        if isinstance(current_view, ZoomableImageView):
+            center_point = current_view.mapToScene(current_view.viewport().rect().center())
+        else:
+            center_point = None
+
+        # Apply zoom to all image views
+        for view in self.image_views:
+            view.set_zoom(zoom_factor)
+            # Sync center point
+            if center_point:
+                view.centerOn(center_point)
 
     def _fit_to_window(self):
         """Fit image to the current window size."""
-        # Get the current tab's scroll area
-        current_widget = self.tabs.currentWidget()
-        scroll_area = current_widget.findChild(QScrollArea)
-        if not scroll_area:
-            return
+        # Fit all views (they should have similar aspect ratios)
+        for view in self.image_views:
+            view.fit_in_view()
 
-        label = scroll_area.widget()
-        if not isinstance(label, ZoomableImageLabel) or label.original_pixmap is None:
-            return
-
-        # Calculate zoom to fit
-        viewport_size = scroll_area.viewport().size()
-        pixmap_size = label.original_pixmap.size()
-
-        width_ratio = viewport_size.width() / pixmap_size.width()
-        height_ratio = viewport_size.height() / pixmap_size.height()
-        fit_zoom = min(width_ratio, height_ratio) * 0.95  # 95% to leave some margin
-
-        self._set_zoom(fit_zoom)
+        # Update slider to match first view
+        if self.image_views:
+            zoom = self.image_views[0].zoom_factor
+            self.zoom_slider.setValue(int(zoom * 100))
+            self.zoom_label.setText(f"{int(zoom * 100)}%")
 
     def _create_image_widget(self, image: np.ndarray) -> QWidget:
-        """Create scrollable widget for displaying image with zoom support.
+        """Create widget for displaying image with zoom support.
 
         Args:
             image: Image to display (BGR format)
 
         Returns:
-            Widget containing zoomable image
+            Widget containing zoomable image view
         """
-        widget = QWidget()
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(False)
-
-        # Use zoomable label
-        image_label = ZoomableImageLabel()
-
         # Convert to QPixmap
         # Ensure the image is contiguous in memory
         if not image.flags['C_CONTIGUOUS']:
@@ -281,36 +406,32 @@ class ImageViewer(QDialog):
 
         pixmap = QPixmap.fromImage(qt_image)
 
-        image_label.set_image(pixmap)
-        scroll_area.setWidget(image_label)
+        # Create graphics view
+        view = ZoomableImageView()
+        view.set_image(pixmap)
 
-        # Enable mouse wheel zoom
-        scroll_area.wheelEvent = lambda event: self._on_wheel_event(event, scroll_area)
+        return view
 
-        layout.addWidget(scroll_area)
-        widget.setLayout(layout)
+    def _create_clahe_image(self) -> np.ndarray:
+        """Create CLAHE-processed version of image.
 
-        return widget
-
-    def _on_wheel_event(self, event: QWheelEvent, scroll_area: QScrollArea):
-        """Handle mouse wheel events for zooming.
-
-        Args:
-            event: Wheel event
-            scroll_area: The scroll area being scrolled
+        Returns:
+            CLAHE-processed image
         """
-        # Check if Ctrl is pressed
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            # Zoom with Ctrl+Wheel
-            delta = event.angleDelta().y()
-            if delta > 0:
-                self._change_zoom(0.1)
-            else:
-                self._change_zoom(-0.1)
-            event.accept()
-        else:
-            # Normal scroll
-            QScrollArea.wheelEvent(scroll_area, event)
+        # Convert to grayscale
+        gray = cv2.cvtColor(self.detection.image, cv2.COLOR_BGR2GRAY)
+
+        # Apply CLAHE
+        clahe = cv2.createCLAHE(
+            clipLimit=self.calibration_options.clahe_clip_limit,
+            tileGridSize=self.calibration_options.clahe_tile_size
+        )
+        clahe_gray = clahe.apply(gray)
+
+        # Convert back to BGR for display
+        clahe_bgr = cv2.cvtColor(clahe_gray, cv2.COLOR_GRAY2BGR)
+
+        return clahe_bgr
 
     def _draw_detection(self) -> np.ndarray:
         """Draw detection overlay on image.
@@ -496,3 +617,20 @@ class ImageViewer(QDialog):
                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         return output
+
+    def _create_coverage_visualization(self) -> np.ndarray:
+        """Create coverage heat map overlay on this image.
+
+        Returns:
+            Image with coverage heat map overlay
+        """
+        from ..core.coverage_analyzer import CoverageAnalyzer
+
+        analyzer = CoverageAnalyzer()
+        overlay = analyzer.create_overlay_visualization(
+            self.result.coverage_report.coverage_map,
+            self.detection.image,
+            alpha=0.5
+        )
+
+        return overlay

@@ -38,6 +38,10 @@ class ImageDetection:
         return len(self.charuco_corners) if self.has_detection else 0
 
 
+if TYPE_CHECKING:
+    from .coverage_analyzer import CoverageReport
+
+
 @dataclass
 class CalibrationResult:
     """Results from camera calibration."""
@@ -47,6 +51,7 @@ class CalibrationResult:
     rms_error: float  # Overall RMS reprojection error
     image_size: Tuple[int, int]  # (width, height)
     detections: List[ImageDetection]  # All image detections with per-image errors
+    coverage_report: Optional['CoverageReport'] = None  # Spatial coverage analysis
 
     @property
     def fx(self) -> float:
@@ -343,12 +348,18 @@ class Calibrator:
                 ) / len(img_points)
                 detection.reprojection_error = error
 
+        # Analyze spatial coverage
+        from .coverage_analyzer import CoverageAnalyzer
+        coverage_analyzer = CoverageAnalyzer()
+        coverage_report = coverage_analyzer.analyze(detections, image_size)
+
         return CalibrationResult(
             camera_matrix=camera_matrix,
             dist_coeffs=dist_coeffs,
             rms_error=ret,
             image_size=image_size,
             detections=detections,
+            coverage_report=coverage_report,
         )
 
     def _identify_outliers(

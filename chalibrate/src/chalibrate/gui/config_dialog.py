@@ -10,20 +10,18 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from ..core import BoardConfig, auto_detect_board
-from ..core.calibration_options import CalibrationOptions
 
 
 class ConfigDialog(QDialog):
     """Dialog for configuring ChArUco board parameters."""
 
-    def __init__(self, parent=None, initial_config=None, images=None, initial_options=None):
+    def __init__(self, parent=None, initial_config=None, images=None):
         """Initialize configuration dialog.
 
         Args:
             parent: Parent widget
             initial_config: Optional initial BoardConfig to populate fields
             images: Optional images for auto-detection
-            initial_options: Optional initial CalibrationOptions
         """
         super().__init__(parent)
         self.setWindowTitle("ChArUco Board Configuration")
@@ -32,7 +30,6 @@ class ConfigDialog(QDialog):
 
         self.config = None
         self.images = images
-        self.calibration_options = initial_options if initial_options else CalibrationOptions()
         self._setup_ui(initial_config)
 
     def _setup_ui(self, initial_config):
@@ -111,22 +108,15 @@ class ConfigDialog(QDialog):
         note_label.setStyleSheet("color: #666;")
         layout.addWidget(note_label)
 
-        # Auto-detect and advanced options buttons
-        buttons_layout = QHBoxLayout()
-
+        # Auto-detect button (if images available)
         if self.images:
+            auto_detect_layout = QHBoxLayout()
             auto_detect_btn = QPushButton("🔍 Auto-Detect from Images")
             auto_detect_btn.setToolTip("Automatically detect board configuration from loaded images")
             auto_detect_btn.clicked.connect(self._auto_detect)
-            buttons_layout.addWidget(auto_detect_btn)
-
-        advanced_btn = QPushButton("⚙️ Advanced Options...")
-        advanced_btn.setToolTip("Configure advanced calibration options for improved accuracy")
-        advanced_btn.clicked.connect(self._show_advanced_options)
-        buttons_layout.addWidget(advanced_btn)
-
-        buttons_layout.addStretch()
-        layout.addLayout(buttons_layout)
+            auto_detect_layout.addWidget(auto_detect_btn)
+            auto_detect_layout.addStretch()
+            layout.addLayout(auto_detect_layout)
 
         # Buttons
         button_box = QDialogButtonBox(
@@ -220,14 +210,6 @@ class ConfigDialog(QDialog):
                 f"An error occurred during auto-detection:\n{str(e)}"
             )
 
-    def _show_advanced_options(self):
-        """Show advanced calibration options dialog."""
-        from .advanced_options_dialog import AdvancedOptionsDialog
-
-        dialog = AdvancedOptionsDialog(self, self.calibration_options)
-        if dialog.exec():
-            self.calibration_options = dialog.get_options()
-
     def get_config(self):
         """Get the configured BoardConfig.
 
@@ -235,11 +217,3 @@ class ConfigDialog(QDialog):
             BoardConfig or None if dialog was cancelled
         """
         return self.config
-
-    def get_config_and_options(self):
-        """Get the configured BoardConfig and CalibrationOptions.
-
-        Returns:
-            Tuple of (BoardConfig, CalibrationOptions) or (None, None) if cancelled
-        """
-        return (self.config, self.calibration_options)
