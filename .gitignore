@@ -11,3 +11,6 @@ wheels/
 
 # other misc
 .mypy_cache
+
+# local secrets
+.env
