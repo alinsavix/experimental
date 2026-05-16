@@ -78,6 +78,7 @@ function isValidJson(str) {
 }
 
 async function fetchOptions() {
+  options.value = []
   if (props.param.getOptions && props.obs?.identified) {
     try {
       const result = await props.param.getOptions(props.obs, props.ctx)
