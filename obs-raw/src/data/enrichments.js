@@ -1,5 +1,37 @@
 // Dynamic option helpers — receive (obs, ctx) where ctx = { ...request, params: currentParams }
 
+async function getInputNames(obs) {
+  return (await obs.call('GetInputList')).inputs.map((i) => i.inputName)
+}
+
+async function getSceneNames(obs) {
+  return (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName)
+}
+
+async function getOutputNames(obs) {
+  return (await obs.call('GetOutputList')).outputs.map((o) => o.outputName)
+}
+
+async function getTransitionNames(obs) {
+  return (await obs.call('GetSceneTransitionList')).transitions.map((t) => t.transitionName)
+}
+
+async function getProfileNames(obs) {
+  return (await obs.call('GetProfileList')).profiles
+}
+
+async function getInputKinds(obs) {
+  return [...new Set((await obs.call('GetInputList')).inputs.map((i) => i.inputKind))]
+}
+
+async function getSupportedImageFormats(obs) {
+  return (await obs.call('GetVersion')).supportedImageFormats
+}
+
+async function getFilterKinds(obs) {
+  return (await obs.call('GetSourceFilterKindList')).sourceFilterKinds
+}
+
 async function getFilterNames(obs, ctx) {
   const sourceName = ctx?.params?.find((p) => p.name === 'sourceName')?.value
   if (!sourceName) return []
@@ -66,8 +98,8 @@ export const enrichments = {
     params: {
       realm: {
         getOptions: async () => [
-            'OBS_WEBSOCKET_DATA_REALM_GLOBAL',
-            'OBS_WEBSOCKET_DATA_REALM_PROFILE'
+          'OBS_WEBSOCKET_DATA_REALM_GLOBAL',
+          'OBS_WEBSOCKET_DATA_REALM_PROFILE',
         ],
       },
     },
@@ -77,8 +109,8 @@ export const enrichments = {
     params: {
       realm: {
         getOptions: async () => [
-            'OBS_WEBSOCKET_DATA_REALM_GLOBAL',
-            'OBS_WEBSOCKET_DATA_REALM_PROFILE'
+          'OBS_WEBSOCKET_DATA_REALM_GLOBAL',
+          'OBS_WEBSOCKET_DATA_REALM_PROFILE',
         ],
       },
     },
@@ -94,17 +126,13 @@ export const enrichments = {
 
   SetCurrentProfile: {
     params: {
-      profileName: {
-        getOptions: async (obs) => (await obs.call('GetProfileList')).profiles,
-      },
+      profileName: { getOptions: getProfileNames },
     },
   },
 
   RemoveProfile: {
     params: {
-      profileName: {
-        getOptions: async (obs) => (await obs.call('GetProfileList')).profiles,
-      },
+      profileName: { getOptions: getProfileNames },
     },
   },
 
@@ -114,31 +142,21 @@ export const enrichments = {
 
   GetSourceActive: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
     },
   },
 
   GetSourceScreenshot: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
-      imageFormat: {
-        getOptions: async (obs) => (await obs.call('GetVersion')).supportedImageFormats,
-      },
+      sourceName: { getOptions: getInputNames },
+      imageFormat: { getOptions: getSupportedImageFormats },
     },
   },
 
   SaveSourceScreenshot: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
-      imageFormat: {
-        getOptions: async (obs) => (await obs.call('GetVersion')).supportedImageFormats,
-      },
+      sourceName: { getOptions: getInputNames },
+      imageFormat: { getOptions: getSupportedImageFormats },
     },
   },
 
@@ -148,53 +166,38 @@ export const enrichments = {
 
   SetCurrentProgramScene: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
     },
   },
 
   SetCurrentPreviewScene: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
     },
   },
 
   RemoveScene: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
     },
   },
 
   SetSceneName: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
     },
   },
 
   GetSceneSceneTransitionOverride: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
     },
   },
 
   SetSceneSceneTransitionOverride: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
-      transitionName: {
-        getOptions: async (obs) =>
-          (await obs.call('GetSceneTransitionList')).transitions.map((t) => t.transitionName),
-      },
+      sceneName: { getOptions: getSceneNames },
+      transitionName: { getOptions: getTransitionNames },
     },
   },
 
@@ -216,148 +219,110 @@ export const enrichments = {
 
   GetInputList: {
     params: {
-      inputKind: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputKind),
-      },
+      inputKind: { getOptions: getInputKinds },
     },
   },
 
   CreateInput: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
-      inputKind: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputKind),
-      },
+      sceneName: { getOptions: getSceneNames },
+      inputKind: { getOptions: getInputKinds },
     },
   },
 
   RemoveInput: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputName: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   GetInputDefaultSettings: {
     params: {
-      inputKind: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputKind),
-      },
+      inputKind: { getOptions: getInputKinds },
     },
   },
 
   GetInputSettings: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputSettings: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   GetInputMute: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputMute: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   ToggleInputMute: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   GetInputVolume: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputVolume: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   GetInputAudioBalance: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputAudioBalance: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   GetInputAudioSyncOffset: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputAudioSyncOffset: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   GetInputAudioMonitorType: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputAudioMonitorType: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
       monitorType: {
         getOptions: async () => [
           'OBS_MONITORING_TYPE_NONE',
@@ -370,17 +335,13 @@ export const enrichments = {
 
   GetInputAudioTracks: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputAudioTracks: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
       inputAudioTracks: {
         getValue: async (obs, ctx) => {
           const inputName = ctx?.params?.find((p) => p.name === 'inputName')?.value
@@ -393,17 +354,13 @@ export const enrichments = {
 
   GetInputDeinterlaceMode: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputDeinterlaceMode: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
       inputDeinterlaceMode: {
         getOptions: async () => [
           'OBS_DEINTERLACE_MODE_DISABLE',
@@ -422,17 +379,13 @@ export const enrichments = {
 
   GetInputDeinterlaceFieldOrder: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetInputDeinterlaceFieldOrder: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
       inputDeinterlaceFieldOrder: {
         getOptions: async () => [
           'OBS_DEINTERLACE_FIELD_ORDER_TOP',
@@ -444,17 +397,13 @@ export const enrichments = {
 
   GetInputPropertiesListPropertyItems: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   PressInputPropertiesButton: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
@@ -464,49 +413,37 @@ export const enrichments = {
 
   GetOutputStatus: {
     params: {
-      outputName: {
-        getOptions: async (obs) => (await obs.call('GetOutputList')).outputs.map((o) => o.outputName),
-      },
+      outputName: { getOptions: getOutputNames },
     },
   },
 
   ToggleOutput: {
     params: {
-      outputName: {
-        getOptions: async (obs) => (await obs.call('GetOutputList')).outputs.map((o) => o.outputName),
-      },
+      outputName: { getOptions: getOutputNames },
     },
   },
 
   StartOutput: {
     params: {
-      outputName: {
-        getOptions: async (obs) => (await obs.call('GetOutputList')).outputs.map((o) => o.outputName),
-      },
+      outputName: { getOptions: getOutputNames },
     },
   },
 
   StopOutput: {
     params: {
-      outputName: {
-        getOptions: async (obs) => (await obs.call('GetOutputList')).outputs.map((o) => o.outputName),
-      },
+      outputName: { getOptions: getOutputNames },
     },
   },
 
   GetOutputSettings: {
     params: {
-      outputName: {
-        getOptions: async (obs) => (await obs.call('GetOutputList')).outputs.map((o) => o.outputName),
-      },
+      outputName: { getOptions: getOutputNames },
     },
   },
 
   SetOutputSettings: {
     params: {
-      outputName: {
-        getOptions: async (obs) => (await obs.call('GetOutputList')).outputs.map((o) => o.outputName),
-      },
+      outputName: { getOptions: getOutputNames },
     },
   },
 
@@ -516,10 +453,7 @@ export const enrichments = {
 
   SetCurrentSceneTransition: {
     params: {
-      transitionName: {
-        getOptions: async (obs) =>
-          (await obs.call('GetSceneTransitionList')).transitions.map((t) => t.transitionName),
-      },
+      transitionName: { getOptions: getTransitionNames },
     },
   },
 
@@ -529,84 +463,62 @@ export const enrichments = {
 
   GetSourceFilterList: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
     },
   },
 
   GetSourceFilterDefaultSettings: {
     params: {
-      filterKind: {
-        getOptions: async (obs) =>
-          (await obs.call('GetSourceFilterList')).filters.map((f) => f.filterKind),
-      },
+      filterKind: { getOptions: getFilterKinds },
     },
   },
 
   CreateSourceFilter: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
       filterName: { getOptions: getFilterNames },
-      filterKind: {
-        getOptions: async (obs) =>
-          (await obs.call('GetSourceFilterList')).filters.map((f) => f.filterKind),
-      },
+      filterKind: { getOptions: getFilterKinds },
     },
   },
 
   RemoveSourceFilter: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   SetSourceFilterName: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   GetSourceFilter: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   SetSourceFilterIndex: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   SetSourceFilterSettings: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   SetSourceFilterEnabled: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
       filterName: { getOptions: getFilterNames },
     },
   },
@@ -617,134 +529,104 @@ export const enrichments = {
 
   GetSceneItemList: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
     },
   },
 
   GetSceneItemId: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sourceName: { getOptions: getSceneItemSources },
     },
   },
 
   CreateSceneItem: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sourceName: { getOptions: getSceneItemSources },
     },
   },
 
   RemoveSceneItem: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   DuplicateSceneItem: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   GetSceneItemTransform: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   SetSceneItemTransform: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   GetSceneItemEnabled: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   SetSceneItemEnabled: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   GetSceneItemLocked: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   SetSceneItemLocked: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   GetSceneItemIndex: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   SetSceneItemIndex: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   GetSceneItemBlendMode: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
     },
   },
 
   SetSceneItemBlendMode: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
       sceneItemId: { getOptions: getSceneItemIds },
       sceneItemBlendMode: {
         getOptions: async () => [
@@ -762,9 +644,7 @@ export const enrichments = {
 
   GetSceneItemSource: {
     params: {
-      sceneName: {
-        getOptions: async (obs) => (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName),
-      },
+      sceneName: { getOptions: getSceneNames },
     },
   },
 
@@ -774,33 +654,25 @@ export const enrichments = {
 
   GetMediaInputStatus: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   SetMediaInputCursor: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   OffsetMediaInputCursor: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   TriggerMediaInputAction: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
@@ -810,31 +682,25 @@ export const enrichments = {
 
   OpenInputPropertiesDialog: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   OpenInputFiltersDialog: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   OpenInputInteractDialog: {
     params: {
-      inputName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      inputName: { getOptions: getInputNames },
     },
   },
 
   OpenVideoMixProjector: {
     params: {
-      sceneItemBlendMode: {
+      videoMixType: {
         getOptions: async () => [
           'OBS_WEBSOCKET_VIDEO_MIX_TYPE_PREVIEW',
           'OBS_WEBSOCKET_VIDEO_MIX_TYPE_PROGRAM',
@@ -846,9 +712,7 @@ export const enrichments = {
 
   OpenSourceProjector: {
     params: {
-      sourceName: {
-        getOptions: async (obs) => (await obs.call('GetInputList')).inputs.map((i) => i.inputName),
-      },
+      sourceName: { getOptions: getInputNames },
     },
   },
 }
