@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bbrender Smoke Tests</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #15171c;
+      color: #f6f7fb;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    .test-pass {
+      color: #86efac;
+    }
+
+    .test-fail {
+      color: #fca5a5;
+    }
+  </style>
+</head>
+<body>
+  <h1>bbrender Smoke Tests</h1>
+  <main id="results" aria-live="polite"></main>
+
+  <script type="module">
+    import * as BBRender from '../bbrender.js';
+    import { renderRendererTestResults, runRendererTests } from './renderer-tests.js';
+
+    const summary = runRendererTests(BBRender, document);
+    window.__BBCodeTestResults = summary;
+    document.getElementById('results').replaceChildren(renderRendererTestResults(summary, document));
+    document.title = summary.failed
+      ? `FAIL ${summary.failed} - bbrender Smoke Tests`
+      : `PASS ${summary.passed} - bbrender Smoke Tests`;
+  </script>
+</body>
+</html>

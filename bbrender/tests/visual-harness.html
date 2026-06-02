@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bbrender Test Harness</title>
+  <script src="./visual-cases.js?v=stroke"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #15171c;
+      color: #f6f7fb;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    a,
+    button {
+      border: 1px solid #3b4252;
+      border-radius: 6px;
+      background: #222733;
+      color: #f6f7fb;
+      padding: 8px 10px;
+      font: inherit;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    button:hover,
+    a:hover {
+      border-color: #6b7280;
+      background: #2c3443;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .case {
+      border: 1px solid #2f3645;
+      border-radius: 8px;
+      background: #1d222d;
+      overflow: hidden;
+    }
+
+    .case-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #2f3645;
+      color: #d7dce8;
+      font-size: 14px;
+    }
+
+    .preview {
+      min-height: 120px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background:
+        linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
+        #0e1118;
+      background-size: 24px 24px;
+      font-size: 32px;
+      font-weight: 400;
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+
+    .preview-inner {
+      min-height: 80px;
+      max-width: 100%;
+    }
+
+    .source,
+    .expected,
+    .diagnostics {
+      margin: 0;
+      padding: 10px 12px;
+      border-top: 1px solid #2f3645;
+      color: #bcc4d4;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .source {
+      color: #f5d67b;
+    }
+
+    .diagnostics {
+      color: #fca5a5;
+    }
+
+    .sequence-shell {
+      min-height: calc(100vh - 130px);
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 16px;
+    }
+
+    .sequence-preview {
+      min-height: 360px;
+      border: 1px solid #2f3645;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0e1118;
+      font-size: clamp(40px, 8vw, 120px);
+      font-weight: 400;
+      text-align: center;
+      overflow-wrap: anywhere;
+      padding: 48px;
+    }
+
+    .sequence-inner {
+      max-width: 100%;
+    }
+
+    .test-pass {
+      color: #86efac;
+    }
+
+    .test-fail {
+      color: #fca5a5;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>bbrender Test Harness</h1>
+    <nav>
+      <a href="visual-harness.html">Grid</a>
+      <a href="visual-harness.html?mode=sequence">Sequence</a>
+      <a href="visual-harness.html?mode=tests">Tests</a>
+      <button id="next-btn" type="button" hidden>Next</button>
+    </nav>
+  </header>
+
+  <main id="app"></main>
+
+  <script type="module">
+    import * as BBRender from '../bbrender.js';
+    import { renderRendererTestResults, runRendererTests } from './renderer-tests.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode') || 'grid';
+    const showPageDiagnostics = params.has('diagnostics') || params.has('debug');
+    const app = document.getElementById('app');
+    const nextBtn = document.getElementById('next-btn');
+    const state = BBRender.createState();
+
+    function renderCase(testCase) {
+      const shell = document.createElement('section');
+      shell.className = 'case';
+
+      const header = document.createElement('div');
+      header.className = 'case-header';
+      header.append(testCase.name, testCase.category);
+
+      const preview = document.createElement('div');
+      preview.className = 'preview';
+      const previewInner = document.createElement('div');
+      previewInner.className = 'preview-inner';
+
+      const diagnostics = [];
+      const source = testCase.payload
+        ? BBRender.extractBBCode(testCase.payload)
+        : testCase.bbcode;
+      BBRender.renderToElement(previewInner, source, {
+        globalTags: testCase.globalTags || '',
+        duration: testCase.duration || state.duration,
+        layout: testCase.layout || null,
+        transition: testCase.transition || null,
+        onDiagnostics: (items) => diagnostics.push(...items)
+      });
+
+      const sourceEl = document.createElement('pre');
+      sourceEl.className = 'source';
+      sourceEl.textContent = testCase.payload
+        ? JSON.stringify(testCase.payload, null, 2)
+        : (testCase.globalTags ? testCase.globalTags + ' ' : '') + testCase.bbcode;
+
+      const expectedEl = document.createElement('p');
+      expectedEl.className = 'expected';
+      expectedEl.textContent = testCase.expected;
+
+      preview.appendChild(previewInner);
+      shell.append(header, preview, sourceEl, expectedEl);
+
+      if (showPageDiagnostics && diagnostics.length > 0) {
+        const diagEl = document.createElement('pre');
+        diagEl.className = 'diagnostics';
+        diagEl.textContent = diagnostics.map((item) => item.message).join('\n');
+        shell.appendChild(diagEl);
+      }
+
+      return shell;
+    }
+
+    function showGrid() {
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      BBCodeTestCases.forEach((testCase) => grid.appendChild(renderCase(testCase)));
+      app.replaceChildren(grid);
+    }
+
+    function showSequence() {
+      nextBtn.hidden = false;
+      let index = -1;
+      const shell = document.createElement('div');
+      shell.className = 'sequence-shell';
+      const preview = document.createElement('div');
+      preview.className = 'sequence-preview';
+      const previewInner = document.createElement('div');
+      previewInner.className = 'sequence-inner';
+      const details = document.createElement('pre');
+      details.className = 'source';
+      preview.appendChild(previewInner);
+      shell.append(preview, details);
+      app.replaceChildren(shell);
+
+      function next() {
+        index = (index + 1) % BBCodeTestCases.length;
+        const testCase = BBCodeTestCases[index];
+        const source = testCase.payload
+          ? BBRender.extractBBCode(testCase.payload)
+          : testCase.bbcode;
+        const diagnostics = [];
+        BBRender.renderToElement(previewInner, source, {
+          globalTags: testCase.globalTags || '',
+          duration: testCase.duration || state.duration,
+          layout: testCase.layout || null,
+          transition: testCase.transition || null,
+          onDiagnostics: (items) => diagnostics.push(...items)
+        });
+        details.textContent = [
+          `${index + 1}/${BBCodeTestCases.length} ${testCase.name}`,
+          testCase.payload ? JSON.stringify(testCase.payload, null, 2) : source,
+          testCase.expected,
+          showPageDiagnostics ? diagnostics.map((item) => item.message).join('\n') : ''
+        ].filter(Boolean).join('\n\n');
+      }
+
+      nextBtn.addEventListener('click', next);
+      next();
+      setInterval(next, 4000);
+    }
+
+    function runTests() {
+      const summary = runRendererTests(BBRender, document);
+      window.__BBCodeTestResults = summary;
+      app.replaceChildren(renderRendererTestResults(summary, document));
+    }
+
+    if (mode === 'sequence') showSequence();
+    else if (mode === 'tests') runTests();
+    else showGrid();
+
+    window.testHarness = {
+      showGrid,
+      showSequence,
+      runTests,
+      state
+    };
+  </script>
+</body>
+</html>

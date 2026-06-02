@@ -1,0 +1,16 @@
+{
+  "name": "bbrender",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Streamer.bot BBCode browser-source renderer.",
+  "main": "bbrender.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test.mjs",
+    "check": "node scripts/check.mjs",
+    "serve": "node scripts/serve.mjs",
+    "vendor:check": "node scripts/vendor-streamerbot-client.mjs check",
+    "vendor:update": "node scripts/vendor-streamerbot-client.mjs update"
+  }
+}

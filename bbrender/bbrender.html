@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bbrender</title>
+  <script src="./vendor/streamerbot-client.js"></script>
+  <style>
+    :root {
+      --text-color: #ffffff;
+      --shadow-color: rgba(0, 0, 0, 0.8);
+      --status-bg: rgba(0, 0, 0, 0.55);
+      --status-offline: #ef4444;
+      --status-online: #22c55e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      position: relative;
+    }
+
+    #status,
+    #diagnostics {
+      position: fixed;
+      left: 16px;
+      display: none;
+      color: #ffffff;
+      background: var(--status-bg);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    body.debug #status,
+    body.debug #diagnostics {
+      display: flex;
+    }
+
+    #status {
+      top: 16px;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+    }
+
+    #diagnostics {
+      bottom: 16px;
+      max-width: min(720px, calc(100vw - 32px));
+      max-height: 30vh;
+      overflow: auto;
+      padding: 10px 12px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+
+    #diagnostics:empty {
+      display: none;
+    }
+
+    #status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--status-offline);
+    }
+
+    body.connected #status-dot {
+      background: var(--status-online);
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    #message-slot {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transform: none;
+    }
+
+    #message {
+      display: inline-block;
+      max-width: min(1400px, 92vw);
+      color: var(--text-color);
+      font-size: clamp(40px, 7vw, 112px);
+      font-weight: 400;
+      line-height: 1.08;
+      letter-spacing: 0;
+      text-align: center;
+      overflow-wrap: anywhere;
+      text-shadow:
+        0 3px 0 var(--shadow-color),
+        0 8px 28px rgba(0, 0, 0, 0.65);
+      opacity: 0;
+      transform-origin: top left;
+      transform: translateY(12px) scale(0.98);
+      transition:
+        opacity 180ms ease,
+        transform 180ms ease;
+    }
+
+    #message.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  </style>
+</head>
+<body>
+  <div id="status" aria-live="polite">
+    <span id="status-dot"></span>
+    <span id="status-text">Connecting to Streamer.bot...</span>
+  </div>
+  <div id="stage">
+    <div id="message-slot">
+      <main id="message" aria-live="polite"></main>
+    </div>
+  </div>
+  <pre id="diagnostics" aria-live="polite"></pre>
+
+  <script type="module">
+    import * as BBRender from './bbrender.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const statusText = document.getElementById('status-text');
+    const messageSlotEl = document.getElementById('message-slot');
+    const messageEl = document.getElementById('message');
+    const diagnosticsEl = document.getElementById('diagnostics');
+    const rendererState = BBRender.createState();
+    rendererState.duration = Math.max(1, parseInt(params.get('duration'), 10) || 4000);
+    rendererState.queueMode = params.has('queue') || params.get('mode') === 'queue' ? 'queue' : 'replace';
+    rendererState.globalTags = params.get('globalTags') || '';
+    rendererState.layout = readLayoutParams();
+    const showPageDiagnostics = params.has('diagnostics') || params.has('debug');
+
+    let hideTimer = null;
+    let removeTextTimer = null;
+    let active = false;
+    const queue = [];
+
+    if (params.has('debug')) {
+      document.body.classList.add('debug');
+    }
+
+    applyMessageLayout(rendererState.layout);
+
+    function decodeBase64(value) {
+      try {
+        return atob(value);
+      } catch {
+        return value;
+      }
+    }
+
+    function getBooleanParam(name) {
+      return params.get(name) === 'true';
+    }
+
+    function readLayoutParams() {
+      return {
+        width: params.get('sourceWidth') || params.get('width') || '',
+        height: params.get('sourceHeight') || params.get('height') || '',
+        padding: params.get('padding') || '',
+        autoPadding: params.has('autoPadding') ? params.get('autoPadding') || 'true' : '',
+        lineHeight: params.get('lineHeight') || params.get('lineSpacing') || '',
+        fontSize: params.get('fontSize') || params.get('baseFontSize') || '',
+        anchor: params.get('anchor') || 'center',
+        x: params.get('x') || '',
+        y: params.get('y') || ''
+      };
+    }
+
+    function readPayloadLayout(payload) {
+      if (!payload || typeof payload !== 'object') return {};
+      const layout = {};
+      [
+        'width', 'sourceWidth', 'height', 'sourceHeight', 'padding', 'autoPadding',
+        'lineHeight', 'lineSpacing', 'fontSize', 'baseFontSize', 'anchor', 'x', 'y'
+      ].forEach((key) => {
+        if (payload[key] !== undefined) layout[key] = payload[key];
+      });
+      return layout;
+    }
+
+    function readPayloadTransition(payload) {
+      if (!payload || typeof payload !== 'object') return null;
+
+      const source = payload.transition && typeof payload.transition === 'object'
+        ? payload.transition
+        : payload.animation && typeof payload.animation === 'object'
+          ? payload.animation
+          : payload;
+
+      const transition = {
+        in: source.in || source.enter || source.entrance || source.transitionIn || source.animationIn,
+        out: source.out || source.exit || source.leave || source.transitionOut || source.animationOut,
+        inTime: source.inTime || source.enterTime || source.entranceTime,
+        outTime: source.outTime || source.exitTime || source.leaveTime,
+        duration: source.duration,
+        delay: source.delay,
+        ease: source.ease,
+        origin: source.origin,
+        scale: source.scale,
+        inScale: source.inScale || source.enterScale,
+        outScale: source.outScale || source.exitScale
+      };
+
+      return Object.values(transition).some((value) => value !== undefined && value !== '')
+        ? transition
+        : null;
+    }
+
+    function mergeLayout(base, override) {
+      return Object.assign({}, base || {}, override || {});
+    }
+
+    function applyMessageLayout(layout) {
+      BBRender.applySourceLayout(messageEl, layout || {});
+      applyMessagePosition(messageSlotEl, layout || {});
+    }
+
+    function applyMessagePosition(slot, layout) {
+      const style = getPositionStyle(layout || {});
+      slot.style.justifyContent = style.justifyContent;
+      slot.style.alignItems = style.alignItems;
+      slot.style.padding = style.padding;
+      slot.style.transform = style.transform;
+    }
+
+    function getPositionStyle(layout) {
+      const parts = getAnchorParts(layout.anchor || 'center');
+      const x = readOffset(layout.x, '0px');
+      const y = readOffset(layout.y, '0px');
+      const horizontal = parts.horizontal;
+      const vertical = parts.vertical;
+      const style = {
+        justifyContent: horizontal === 'left' ? 'flex-start' : horizontal === 'right' ? 'flex-end' : 'center',
+        alignItems: vertical === 'top' ? 'flex-start' : vertical === 'bottom' ? 'flex-end' : 'center',
+        padding: '0',
+        transform: ''
+      };
+      const paddingTop = vertical === 'top' ? xOrZero(y) : '0px';
+      const paddingRight = horizontal === 'right' ? xOrZero(x) : '0px';
+      const paddingBottom = vertical === 'bottom' ? xOrZero(y) : '0px';
+      const paddingLeft = horizontal === 'left' ? xOrZero(x) : '0px';
+      style.padding = [paddingTop, paddingRight, paddingBottom, paddingLeft].join(' ');
+
+      const transforms = [];
+      if (horizontal === 'center' && x !== '0px') transforms.push('translateX(' + x + ')');
+      if (vertical === 'center' && y !== '0px') transforms.push('translateY(' + y + ')');
+      style.transform = transforms.join(' ');
+      return style;
+    }
+
+    function xOrZero(value) {
+      return value && value[0] !== '-' ? value : '0px';
+    }
+
+    function getAnchorParts(value) {
+      const anchor = String(value || 'center').trim().toLowerCase();
+      const anchors = {
+        center: { horizontal: 'center', vertical: 'center' },
+        top: { horizontal: 'center', vertical: 'top' },
+        left: { horizontal: 'left', vertical: 'center' },
+        right: { horizontal: 'right', vertical: 'center' },
+        bottom: { horizontal: 'center', vertical: 'bottom' },
+        'top-left': { horizontal: 'left', vertical: 'top' },
+        'top-right': { horizontal: 'right', vertical: 'top' },
+        'bottom-left': { horizontal: 'left', vertical: 'bottom' },
+        'bottom-right': { horizontal: 'right', vertical: 'bottom' }
+      };
+      return anchors[anchor] || anchors.center;
+    }
+
+    function readOffset(value, fallback) {
+      if (value === undefined || value === null || value === '') return fallback;
+      const raw = String(value).trim();
+      if (/^-?[0-9.]+(px|vw|vh|vmin|vmax|em|rem|%)$/i.test(raw)) return raw;
+      const parsed = parseFloat(raw);
+      return Number.isFinite(parsed) ? parsed + 'px' : fallback;
+    }
+
+    function setConnectionStatus(connected) {
+      document.body.classList.toggle('connected', connected);
+      statusText.textContent = connected
+        ? 'Connected to Streamer.bot'
+        : 'Connecting to Streamer.bot...';
+    }
+
+    function setDiagnostics(items) {
+      const messages = (items || []).map((item) => item.message || String(item));
+      diagnosticsEl.textContent = showPageDiagnostics ? messages.join('\n') : '';
+    }
+
+    function clearMessage() {
+      clearTimeout(hideTimer);
+      clearTimeout(removeTextTimer);
+      queue.length = 0;
+      active = false;
+      messageEl.classList.remove('visible');
+      BBRender.clearRootTransition(messageEl);
+      messageEl.replaceChildren();
+      setDiagnostics([]);
+    }
+
+    function showBBCode(bbcode, options) {
+      const opts = options || {};
+      const duration = Math.max(1, parseInt(opts.duration || (opts.transition && opts.transition.duration), 10) || rendererState.duration);
+      const effectiveLayout = mergeLayout(rendererState.layout, opts.layout);
+
+      if (rendererState.queueMode === 'queue' && active && !opts.immediate) {
+        queue.push({ bbcode, duration, layout: opts.layout || {}, transition: opts.transition || null });
+        return;
+      }
+
+      active = true;
+      clearTimeout(hideTimer);
+      clearTimeout(removeTextTimer);
+      applyMessageLayout(effectiveLayout);
+
+      BBRender.renderToElement(messageEl, bbcode, {
+        globalTags: rendererState.globalTags,
+        duration,
+        layout: effectiveLayout,
+        transition: opts.transition || null,
+        onDiagnostics: setDiagnostics
+      });
+      messageEl.classList.add('visible');
+
+      hideTimer = setTimeout(() => {
+        messageEl.classList.remove('visible');
+        removeTextTimer = setTimeout(() => {
+          messageEl.replaceChildren();
+          active = false;
+          if (queue.length > 0) {
+            const next = queue.shift();
+            showBBCode(next.bbcode, { duration: next.duration, layout: next.layout, transition: next.transition, immediate: true });
+          }
+        }, 200);
+      }, duration);
+    }
+
+    function receivePayload(payload) {
+      if (!BBRender.shouldHandlePayload(payload)) {
+        if (params.has('debug')) console.log('Ignored General.Custom payload with unsupported type:', payload);
+        return false;
+      }
+
+      const command = BBRender.getCommand(payload);
+
+      if (command === 'clear') {
+        clearMessage();
+        return true;
+      }
+
+      if (command === 'set_global_tags') {
+        rendererState.globalTags = String(payload.tags || payload.globalTags || '');
+        return true;
+      }
+
+      if (command === 'set_duration') {
+        rendererState.duration = Math.max(1, parseInt(payload.duration || payload.ms, 10) || rendererState.duration);
+        return true;
+      }
+
+      if (command === 'set_layout') {
+        rendererState.layout = {
+          width: payload.width !== undefined ? payload.width : payload.sourceWidth !== undefined ? payload.sourceWidth : rendererState.layout.width || '',
+          height: payload.height !== undefined ? payload.height : payload.sourceHeight !== undefined ? payload.sourceHeight : rendererState.layout.height || '',
+          padding: payload.padding !== undefined ? payload.padding : rendererState.layout.padding || '',
+          autoPadding: payload.autoPadding !== undefined ? payload.autoPadding : rendererState.layout.autoPadding || '',
+          lineHeight: payload.lineHeight || payload.lineSpacing || rendererState.layout.lineHeight || '',
+          fontSize: payload.fontSize !== undefined ? payload.fontSize : payload.baseFontSize !== undefined ? payload.baseFontSize : rendererState.layout.fontSize || '',
+          anchor: payload.anchor || rendererState.layout.anchor || 'center',
+          x: payload.x !== undefined ? payload.x : rendererState.layout.x || '',
+          y: payload.y !== undefined ? payload.y : rendererState.layout.y || ''
+        };
+        applyMessageLayout(rendererState.layout);
+        return true;
+      }
+
+      if (command === 'set_variable') {
+        if (payload.name) rendererState.variables[payload.name] = String(payload.value || '');
+        return true;
+      }
+
+      if (command === 'set_preset') {
+        if (payload.name) rendererState.presets[payload.name] = String(payload.value || payload.tags || '');
+        return true;
+      }
+
+      const bbcode = BBRender.extractBBCode(payload);
+      if (bbcode) {
+        showBBCode(bbcode, {
+          duration: payload && typeof payload === 'object' ? payload.duration || payload.ms : undefined,
+          layout: readPayloadLayout(payload),
+          transition: readPayloadTransition(payload),
+          immediate: rendererState.queueMode !== 'queue'
+        });
+        return true;
+      }
+
+      return false;
+    }
+
+    const sbClient = new StreamerbotClient({
+      host: params.get('host') || '127.0.0.1',
+      port: parseInt(params.get('port'), 10) || 8085,
+      scheme: params.has('secure') && getBooleanParam('secure') ? 'wss' : 'ws',
+      endpoint: params.get('endpoint') || '/',
+      password: params.has('password') ? decodeBase64(params.get('password')) : undefined,
+      onConnect: async (info) => {
+        console.log('Connected to Streamer.bot:', info);
+        setConnectionStatus(true);
+        // Log every raw WebSocket frame
+        const rawSocket = sbClient.socket;
+        if (rawSocket) {
+          rawSocket.addEventListener('message', (event) => {
+            try {
+              console.log('[WS]', JSON.parse(event.data));
+            } catch {
+              console.log('[WS raw]', event.data);
+            }
+          });
+        }
+      },
+      onDisconnect: () => {
+        setConnectionStatus(false);
+      },
+      onError: (error) => {
+        console.error('Streamer.bot connection error:', error);
+        setConnectionStatus(false);
+      }
+    });
+
+    // Custom event — also route payload to renderer
+    sbClient.on('General.Custom', (sbData) => {
+      console.log('General.Custom:', sbData);
+      receivePayload(sbData.data);
+    });
+
+    // Subscribe to all other known streamer.bot event types
+    const allEventTypes = [
+      // General
+      'General.Startup', 'General.Shutdown', 'General.Debug',
+      // Twitch chat / moderation
+      'Twitch.ChatMessage', 'Twitch.ChatMessageDeleted',
+      'Twitch.UserBanned', 'Twitch.UserTimedOut', 'Twitch.Announcement',
+      'Twitch.BotWhisper', 'Twitch.Whisper', 'Twitch.FirstWord',
+      'Twitch.BanEvasionEvaluated', 'Twitch.ShieldModeBegin', 'Twitch.ShieldModeEnd',
+      // Twitch follows / subs / bits
+      'Twitch.Follow', 'Twitch.Cheer', 'Twitch.BitsBadgeTier',
+      'Twitch.Sub', 'Twitch.ReSub', 'Twitch.GiftSub', 'Twitch.GiftBomb',
+      // Twitch raids
+      'Twitch.Raid',
+      // Twitch rewards
+      'Twitch.RewardRedemption', 'Twitch.RewardCreated', 'Twitch.RewardUpdated',
+      'Twitch.RewardDeleted', 'Twitch.RewardPaused', 'Twitch.RewardUnpaused',
+      'Twitch.AutomaticRewardRedemption',
+      // Twitch polls & predictions
+      'Twitch.PollCreated', 'Twitch.PollUpdated', 'Twitch.PollTerminated',
+      'Twitch.PollArchived', 'Twitch.PollModerated', 'Twitch.PollInvalidated',
+      'Twitch.PredictionCreated', 'Twitch.PredictionUpdated', 'Twitch.PredictionLocked',
+      'Twitch.PredictionResolved', 'Twitch.PredictionCanceled',
+      // Twitch hype train
+      'Twitch.HypeTrainStart', 'Twitch.HypeTrainUpdate',
+      'Twitch.HypeTrainLevelUp', 'Twitch.HypeTrainEnd',
+      // Twitch goals / charity / community
+      'Twitch.GoalBegin', 'Twitch.GoalProgress', 'Twitch.GoalEnd',
+      'Twitch.CharityDonation', 'Twitch.CharityCompleted',
+      'Twitch.CommunityGoalContribution', 'Twitch.CommunityGoalEnded',
+      // Twitch ads / stream
+      'Twitch.AdRun', 'Twitch.AdMidRoll',
+      'Twitch.StreamUpdate', 'Twitch.StreamOnline', 'Twitch.StreamOffline',
+      // YouTube
+      'YouTube.BroadcastStarted', 'YouTube.BroadcastEnded',
+      'YouTube.Message', 'YouTube.MessageDeleted', 'YouTube.UserBanned',
+      'YouTube.SuperChat', 'YouTube.SuperSticker',
+      'YouTube.NewSponsor', 'YouTube.NewMember', 'YouTube.MemberMilestone', 'YouTube.MemberGifted',
+      // OBS
+      'Obs.Connected', 'Obs.Disconnected',
+      'Obs.StreamingStarted', 'Obs.StreamingStarting', 'Obs.StreamingStopped', 'Obs.StreamingStopping',
+      'Obs.RecordingStarted', 'Obs.RecordingStarting', 'Obs.RecordingStopped', 'Obs.RecordingStopping',
+      'Obs.ReplayBufferStarted', 'Obs.ReplayBufferStarting',
+      'Obs.ReplayBufferStopped', 'Obs.ReplayBufferStopping', 'Obs.ReplayBufferSaved',
+      'Obs.SceneChanged', 'Obs.SceneItemEnableStateChanged',
+      'Obs.FilterEnableStateChanged', 'Obs.SourceFilterListReindexed', 'Obs.SourceOrderChanged',
+      'Obs.Custom',
+      // Streamer.bot actions (Raw)
+      'Raw.Action', 'Raw.SubAction', 'Raw.ActionCompleted',
+      // Application
+      'Application.ActionAdded', 'Application.ActionUpdated', 'Application.ActionDeleted',
+      // Streamlabs
+      'Streamlabs.Donation', 'Streamlabs.Merchandise',
+      // StreamElements
+      'StreamElements.Donation', 'StreamElements.MerchBuy',
+      // Ko-fi
+      'Kofi.Donation', 'Kofi.Subscription', 'Kofi.Commission', 'Kofi.ShopOrder',
+      // Patreon
+      'Patreon.Pledge',
+      // DonorDrive
+      'DonorDrive.Donation', 'DonorDrive.ProfileIncentiveUnlocked',
+      'DonorDrive.ActivityFeedItemCreated', 'DonorDrive.Milestone', 'DonorDrive.Fundraiser',
+      // Fourthwall
+      'Fourthwall.OrderCreated', 'Fourthwall.OrderStatusUpdated', 'Fourthwall.GiftPurchase',
+      // HypeRate / Pulsoid
+      'HypeRate.HeartRateUpdate', 'Pulsoid.HeartRateUpdate',
+      // Stream Deck
+      'Streamdeck.ButtonPress', 'Streamdeck.ButtonHold', 'Streamdeck.ButtonRelease',
+    ];
+
+    for (const eventType of allEventTypes) {
+      sbClient.on(eventType, (sbData) => {
+        console.log(`${eventType}:`, sbData);
+      });
+    }
+
+    window.bbrender = {
+      showText: showBBCode,
+      showBBCode,
+      clearMessage,
+      receivePayload,
+      getPositionStyle,
+      state: rendererState,
+      client: sbClient
+    };
+
+    setConnectionStatus(false);
+  </script>
+</body>
+</html>
