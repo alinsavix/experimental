@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Song Requests</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎵 Song Requests</h1>
+            <div class="header-actions">
+                <label class="toggle-label">
+                    <input type="checkbox" id="enableToggle" />
+                    <span>Enabled</span>
+                </label>
+                <button id="settingsBtn" class="btn btn-icon" title="Settings">⚙️</button>
+            </div>
+        </header>
+
+        <!-- Player Section -->
+        <section class="player-section">
+            <div class="player-container">
+                <div id="playerWrapper" class="player-wrapper">
+                    <div id="player"></div>
+                    <div id="playerPlaceholder" class="player-placeholder">
+                        <span>No song playing</span>
+                    </div>
+                </div>
+                <div class="now-playing-info">
+                    <div class="now-playing-text">
+                        <div id="nowPlayingTitle" class="now-playing-title">No song playing</div>
+                        <div id="nowPlayingArtist" class="now-playing-artist"></div>
+                    </div>
+                    <div class="progress-container">
+                        <span id="currentTime">0:00</span>
+                        <input type="range" id="seekBar" class="seek-bar" min="0" max="100" value="0" />
+                        <span id="totalTime">0:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Player Controls -->
+            <div class="controls">
+                <button id="prevBtn" class="btn btn-control" title="Previous">⏮</button>
+                <button id="playPauseBtn" class="btn btn-control btn-play" title="Play/Pause">▶</button>
+                <button id="nextBtn" class="btn btn-control" title="Skip">⏭</button>
+                <button id="shuffleBtn" class="btn btn-control" title="Shuffle Playlist">🔀</button>
+                <div class="volume-control">
+                    <button id="muteBtn" class="btn btn-control" title="Mute">🔊</button>
+                    <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="50" />
+                </div>
+            </div>
+        </section>
+
+        <!-- Tabs -->
+        <nav class="tabs">
+            <button class="tab active" data-tab="queue">Queue</button>
+            <button class="tab" data-tab="playlist">Playlist</button>
+            <button class="tab" data-tab="settings">Settings</button>
+        </nav>
+
+        <!-- Queue Tab -->
+        <section id="queueTab" class="tab-content active">
+            <div class="queue-controls">
+                <input type="text" id="queueSearch" class="search-input" placeholder="Search queue..." />
+                <div class="queue-actions">
+                    <button id="requestSongBtn" class="btn btn-primary">Request Song</button>
+                    <button id="clearQueueBtn" class="btn btn-danger">Clear Queue</button>
+                </div>
+            </div>
+            <div id="queueList" class="song-list">
+                <div class="empty-state">Queue is empty. Request a song to get started!</div>
+            </div>
+        </section>
+
+        <!-- Playlist Tab -->
+        <section id="playlistTab" class="tab-content">
+            <div class="queue-controls">
+                <input type="text" id="playlistSearch" class="search-input" placeholder="Search playlist..." />
+                <div class="queue-actions">
+                    <button id="addToPlaylistBtn" class="btn btn-primary">Add Song</button>
+                    <button id="importPlaylistBtn" class="btn btn-secondary">Import YouTube Playlist</button>
+                    <button id="clearPlaylistBtn" class="btn btn-danger">Clear Playlist</button>
+                </div>
+            </div>
+            <div id="playlistList" class="song-list">
+                <div class="empty-state">Playlist is empty.</div>
+            </div>
+            <div id="playlistPagination" class="pagination"></div>
+        </section>
+
+        <!-- Settings Tab -->
+        <section id="settingsTab" class="tab-content">
+            <div class="settings-panel">
+                <h2>Song Request Settings</h2>
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="settingEnabled" />
+                        Song Requests Enabled
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label>Volume</label>
+                    <input type="range" id="settingVolume" min="0" max="100" value="50" />
+                    <span id="settingVolumeLabel">50</span>
+                </div>
+                <div class="setting-group">
+                    <label>Search Provider</label>
+                    <select id="settingSearchProvider">
+                        <option value="youtube">YouTube</option>
+                        <option value="soundcloud">SoundCloud</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>Providers</label>
+                    <label><input type="checkbox" id="providerYoutube" value="youtube" checked /> YouTube</label>
+                    <label><input type="checkbox" id="providerSoundcloud" value="soundcloud" checked />
+                        SoundCloud</label>
+                </div>
+                <div class="setting-group">
+                    <label>Minimum User Level</label>
+                    <select id="settingUserLevel">
+                        <option value="everyone">Everyone</option>
+                        <option value="regular">Regular</option>
+                        <option value="subscriber">Subscriber</option>
+                        <option value="moderator">Moderator</option>
+                    </select>
+                </div>
+                <h3>Limits</h3>
+                <div class="setting-group">
+                    <label>Max Queue Size</label>
+                    <input type="number" id="settingQueueLimit" min="1" max="100" value="20" />
+                </div>
+                <div class="setting-group">
+                    <label>Max Songs Per User</label>
+                    <input type="number" id="settingUserLimit" min="1" max="50" value="5" />
+                </div>
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="settingPlaylistOnly" />
+                        Playlist Only Mode
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label>Exempt User Level</label>
+                    <select id="settingExemptLevel">
+                        <option value="moderator">Moderator</option>
+                        <option value="subscriber">Subscriber</option>
+                        <option value="regular">Regular</option>
+                        <option value="everyone">Everyone</option>
+                    </select>
+                </div>
+                <h3>YouTube Options</h3>
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="settingLimitToMusic" />
+                        Limit to Music Category
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="settingLimitToLiked" />
+                        Limit to Liked Videos
+                    </label>
+                </div>
+                <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+            </div>
+        </section>
+
+        <!-- Add Song Modal -->
+        <div id="songModal" class="modal hidden">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <h2 id="modalTitle">Request a Song</h2>
+                <p id="modalDesc">Enter a song name or URL</p>
+                <input type="text" id="modalInput" class="modal-input" placeholder="Song name or URL" />
+                <div class="modal-actions">
+                    <button id="modalCancel" class="btn btn-secondary">Cancel</button>
+                    <button id="modalSubmit" class="btn btn-primary">Request</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Confirm Modal -->
+        <div id="confirmModal" class="modal hidden">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <h2 id="confirmTitle">Confirm</h2>
+                <p id="confirmDesc">Are you sure?</p>
+                <div class="modal-actions">
+                    <button id="confirmCancel" class="btn btn-secondary">Cancel</button>
+                    <button id="confirmSubmit" class="btn btn-danger">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast container -->
+        <div id="toasts" class="toast-container"></div>
+    </div>
+
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
