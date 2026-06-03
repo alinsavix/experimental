@@ -182,6 +182,7 @@
 
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode') || 'grid';
+    const caseId = params.get('case') || '';
     const showPageDiagnostics = params.has('diagnostics') || params.has('debug');
     const app = document.getElementById('app');
     const nextBtn = document.getElementById('next-btn');
@@ -190,6 +191,8 @@
     function renderCase(testCase) {
       const shell = document.createElement('section');
       shell.className = 'case';
+      shell.dataset.caseId = testCase.id;
+      shell.dataset.category = testCase.category;
 
       const header = document.createElement('div');
       header.className = 'case-header';
@@ -238,7 +241,19 @@
     function showGrid() {
       const grid = document.createElement('div');
       grid.className = 'grid';
-      BBCodeTestCases.forEach((testCase) => grid.appendChild(renderCase(testCase)));
+      const visibleCases = caseId
+        ? BBCodeTestCases.filter((testCase) => testCase.id === caseId)
+        : BBCodeTestCases;
+
+      if (visibleCases.length === 0) {
+        const missing = document.createElement('p');
+        missing.className = 'diagnostics';
+        missing.textContent = `No visual case found for "${caseId}".`;
+        app.replaceChildren(missing);
+        return;
+      }
+
+      visibleCases.forEach((testCase) => grid.appendChild(renderCase(testCase)));
       app.replaceChildren(grid);
     }
 

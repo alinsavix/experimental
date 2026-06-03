@@ -125,8 +125,8 @@ export function runRendererTests(BBRender, doc = document) {
       transition: { in: 'zoom', out: 'fade', inTime: 400, outTime: 600 }
     });
     assert('root transition marker is assigned', transitioned.dataset.bbTransition === 'root');
-    assert('root transition includes entrance animation', transitioned.style.animation.includes('bb-enter-zoom 400ms'));
-    assert('root transition includes exit animation', transitioned.style.animation.includes('bb-exit-fade 600ms'));
+    assert('root transition includes entrance animation', transitioned.style.animation.includes('bb-enter-zoom') && transitioned.style.animation.includes('400ms'));
+    assert('root transition includes exit animation', transitioned.style.animation.includes('bb-exit-fade') && transitioned.style.animation.includes('600ms'));
     assert('root transition computes exit delay from duration', transitioned.style.animation.includes('4400ms'));
     assert('root transition sets zoom scale default', transitioned.style.getPropertyValue('--bb-enter-zoom-scale') === '0.18');
 

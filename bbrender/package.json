@@ -8,9 +8,16 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node scripts/test.mjs",
+    "test:browser": "playwright test",
+    "test:visual": "playwright test tests/visual.spec.js",
+    "test:visual:update": "playwright test tests/visual.spec.js --update-snapshots",
     "check": "node scripts/check.mjs",
     "serve": "node scripts/serve.mjs",
+    "install:browsers": "playwright install chromium",
     "vendor:check": "node scripts/vendor-streamerbot-client.mjs check",
     "vendor:update": "node scripts/vendor-streamerbot-client.mjs update"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }
