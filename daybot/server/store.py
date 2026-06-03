@@ -5,7 +5,8 @@ from __future__ import annotations
 import copy
 from typing import Optional
 
-from .models import Channel, Settings, SongItem, SongUser, Track, new_id, now_iso
+from .models import (Channel, Settings, SongItem, SongUser, Track, new_id,
+                     now_iso)
 
 
 class ChannelStore:

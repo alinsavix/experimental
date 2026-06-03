@@ -1,15 +1,14 @@
 #!/usr/bin/env -S uv run --script
-import tkinter as tk
-from tkinter import ttk
 import json
 import math
 import os
 import pathlib
 import random
-import time
 import threading
+import time
+import tkinter as tk
 import urllib.request
-
+from tkinter import ttk
 
 # --- Hue configuration (loaded from .env next to this script) ---
 

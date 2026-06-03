@@ -1,15 +1,15 @@
 """Undistortion preview dialog."""
 
+from pathlib import Path
 from typing import List
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QScrollArea, QWidget, QFileDialog, QMessageBox
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QImage
+
 import cv2
 import numpy as np
-from pathlib import Path
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtWidgets import (QComboBox, QDialog, QFileDialog, QHBoxLayout,
+                             QLabel, QMessageBox, QPushButton, QScrollArea,
+                             QVBoxLayout, QWidget)
 
 from ..core import CalibrationResult, ImageDetection
 

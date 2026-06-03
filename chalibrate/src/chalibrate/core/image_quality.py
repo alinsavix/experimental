@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass, field
 from typing import List
-import numpy as np
+
 import cv2
+import numpy as np
 
 
 @dataclass

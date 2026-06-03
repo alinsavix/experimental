@@ -5,19 +5,22 @@ Splits audio files into 1-minute segments, performs FFT analysis,
 and detects high-frequency spikes above 17kHz.
 """
 
-import os
-import sys
 import argparse
+import os
 import subprocess
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import numpy as np
+
 import matplotlib
+import numpy as np
+
 matplotlib.use('Agg')  # Use non-interactive backend for parallel plotting
-import matplotlib.pyplot as plt
-from pathlib import Path
-from scipy.io import wavfile
-from scipy import signal
 import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+from scipy import signal
+from scipy.io import wavfile
 
 
 class AudioFrequencyAnalyzer:
@@ -416,10 +419,11 @@ class AudioFrequencyAnalyzer:
         # Create a temporary analyzer instance just for this worker
         # We need to recreate objects since they can't be pickled across processes
         from pathlib import Path
-        import numpy as np
-        from scipy.io import wavfile
-        from scipy import signal
+
         import matplotlib
+        import numpy as np
+        from scipy import signal
+        from scipy.io import wavfile
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         

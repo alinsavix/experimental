@@ -1,12 +1,12 @@
 """Advanced calibration options dialog."""
 
 from typing import Optional
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget,
-    QLabel, QSpinBox, QDoubleSpinBox, QPushButton, QCheckBox,
-    QComboBox, QDialogButtonBox, QGroupBox, QWidget
-)
+
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+                             QDoubleSpinBox, QFormLayout, QGroupBox,
+                             QHBoxLayout, QLabel, QPushButton, QSpinBox,
+                             QTabWidget, QVBoxLayout, QWidget)
 
 from ..core.calibration_options import CalibrationOptions
 

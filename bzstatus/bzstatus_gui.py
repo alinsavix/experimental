@@ -3,11 +3,12 @@ Backblaze Status GUI
 A simple GUI application to monitor Backblaze backup status
 """
 
-import tkinter as tk
-from tkinter import ttk, scrolledtext
 import threading
 import time
+import tkinter as tk
 from datetime import datetime
+from tkinter import scrolledtext, ttk
+
 from backblaze_client import BackblazeClient
 
 

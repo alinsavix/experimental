@@ -2,6 +2,7 @@
 
 from enum import Enum
 from typing import List
+
 from .calibrator import CalibrationResult, ImageDetection
 
 

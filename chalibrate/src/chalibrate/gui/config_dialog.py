@@ -1,13 +1,12 @@
 """Board configuration dialog."""
 
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
+
 import numpy as np
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QSpinBox, QDoubleSpinBox, QPushButton,
-    QComboBox, QDialogButtonBox, QMessageBox
-)
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
+                             QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel,
+                             QMessageBox, QPushButton, QSpinBox, QVBoxLayout)
 
 from ..core import BoardConfig, auto_detect_board
 

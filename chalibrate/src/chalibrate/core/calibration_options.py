@@ -1,7 +1,8 @@
 """Configuration options for camera calibration accuracy improvements."""
 
 from dataclasses import dataclass, field
-from typing import Tuple, Optional
+from typing import Optional, Tuple
+
 import cv2
 
 

@@ -4,12 +4,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
 import numpy as np
 
+from .cli import CLIFormatter
 from .core import BoardConfig, Calibrator
 from .core.calibration_options import CalibrationOptions
 from .utils import ImageLoader
-from .cli import CLIFormatter
 
 
 def parse_args():
@@ -392,6 +393,7 @@ def run_gui(args):
         Exit code (0 for success, 1 for error)
     """
     from PyQt6.QtWidgets import QApplication
+
     from .gui.main_window import MainWindow
 
     app = QApplication(sys.argv)

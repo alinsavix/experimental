@@ -1,9 +1,10 @@
 """Automatic ChArUco board configuration detection."""
 
-from typing import Optional, List, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
 import cv2
 import numpy as np
-from dataclasses import dataclass
 
 from .board_config import BoardConfig
 

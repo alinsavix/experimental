@@ -1,7 +1,8 @@
 """CLI output formatting."""
 
 from typing import List
-from ..core import CalibrationResult, QualityMetrics, ImageQuality
+
+from ..core import CalibrationResult, ImageQuality, QualityMetrics
 
 
 class CLIFormatter:

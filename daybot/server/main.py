@@ -7,22 +7,17 @@ import secrets
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (FastAPI, Header, HTTPException, Query, Request, WebSocket,
+                     WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .models import (
-    AddSongRequest,
-    ImportPlaylistRequest,
-    ReorderRequest,
-    Settings,
-    SongUser,
-    UpdateSettingsRequest,
-)
+from .media_resolver import resolve_song, resolve_youtube_playlist
+from .models import (AddSongRequest, ImportPlaylistRequest, ReorderRequest,
+                     Settings, SongUser, UpdateSettingsRequest)
 from .store import ChannelStore, store
 from .ws_manager import manager
-from .media_resolver import resolve_song, resolve_youtube_playlist
 
 app = FastAPI(title="Song Request Server")
 

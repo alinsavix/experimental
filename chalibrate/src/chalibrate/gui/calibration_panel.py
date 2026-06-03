@@ -1,13 +1,13 @@
 """Calibration results and control panel."""
 
-from typing import Optional
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar,
-    QPushButton, QGroupBox, QGridLayout, QFileDialog, QMessageBox
-)
-from PyQt6.QtCore import Qt
 import json
+from typing import Optional
+
 import numpy as np
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QFileDialog, QGridLayout, QGroupBox, QHBoxLayout,
+                             QLabel, QMessageBox, QProgressBar, QPushButton,
+                             QVBoxLayout, QWidget)
 
 from ..core import CalibrationResult, QualityMetrics
 

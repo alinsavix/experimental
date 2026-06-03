@@ -1,12 +1,11 @@
 """Coverage heat map visualization dialog."""
 
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QImage, QPainter
 import numpy as np
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QImage, QPainter, QPixmap
+from PyQt6.QtWidgets import (QDialog, QGraphicsPixmapItem, QGraphicsScene,
+                             QGraphicsView, QHBoxLayout, QLabel, QPushButton,
+                             QVBoxLayout)
 
 from ..core import CalibrationResult
 from ..core.coverage_analyzer import CoverageAnalyzer

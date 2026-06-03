@@ -1,15 +1,14 @@
 """Full-size image viewer with detection overlay."""
 
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget,
-    QWidget, QPushButton, QSlider, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QImage, QWheelEvent, QTransform, QPainter
 import cv2
 import numpy as np
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QImage, QPainter, QPixmap, QTransform, QWheelEvent
+from PyQt6.QtWidgets import (QDialog, QGraphicsPixmapItem, QGraphicsScene,
+                             QGraphicsView, QHBoxLayout, QLabel, QPushButton,
+                             QSlider, QTabWidget, QVBoxLayout, QWidget)
 
-from ..core import ImageDetection, CalibrationResult, Calibrator
+from ..core import CalibrationResult, Calibrator, ImageDetection
 
 
 class ZoomableImageView(QGraphicsView):

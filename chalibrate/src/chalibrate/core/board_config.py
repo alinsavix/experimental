@@ -1,6 +1,7 @@
 """ChArUco board configuration."""
 
 from dataclasses import dataclass
+
 import cv2
 import numpy as np
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env -S uv run --script
+import colorsys
+import math
+import random
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk
-import colorsys
-import random
-import time
-import threading
-import math
+
 try:
     from colorspacious import cspace_convert
     HAS_COLORSPACIOUS = True

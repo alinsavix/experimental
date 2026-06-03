@@ -3,12 +3,12 @@ Backblaze Client Interface
 Handles communication with Backblaze backup client
 """
 
-import subprocess
-import os
 import json
+import os
+import re
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
-import re
 
 
 class BackblazeClient:

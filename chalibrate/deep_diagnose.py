@@ -4,8 +4,10 @@ Deep diagnostic - tries MANY more combinations and shows what's happening
 """
 
 import sys
+
 import cv2
 import numpy as np
+
 
 def test_board_config(gray, marker_corners, marker_ids, dictionary, dict_name,
                      squares_x, squares_y, square_len, marker_len):

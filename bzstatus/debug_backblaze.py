@@ -2,8 +2,9 @@
 Debug script to help identify Backblaze data files and their locations
 """
 
-import os
 import glob
+import os
+
 
 def find_backblaze_files():
     """Search for Backblaze installation and data files"""

@@ -1,21 +1,20 @@
 """Main application window."""
 
-from typing import Optional, List, Tuple
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QMenuBar, QMenu, QFileDialog, QMessageBox, QStatusBar,
-    QToolBar
-)
+from typing import List, Optional, Tuple
+
+import numpy as np
 from PyQt6.QtCore import Qt, QThreadPool
 from PyQt6.QtGui import QAction
-import numpy as np
+from PyQt6.QtWidgets import (QFileDialog, QHBoxLayout, QMainWindow, QMenu,
+                             QMenuBar, QMessageBox, QSplitter, QStatusBar,
+                             QToolBar, QVBoxLayout, QWidget)
 
 from ..core import BoardConfig, CalibrationResult
 from ..core.calibration_options import CalibrationOptions
 from ..utils import ImageLoader
+from .calibration_panel import CalibrationPanel
 from .config_dialog import ConfigDialog
 from .image_grid import ImageGrid
-from .calibration_panel import CalibrationPanel
 from .workers import CalibrationWorker
 
 

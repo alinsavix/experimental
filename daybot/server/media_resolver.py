@@ -6,7 +6,6 @@ import re
 
 import yt_dlp
 
-
 _YDL_OPTS = {
     "quiet": True,
     "no_warnings": True,

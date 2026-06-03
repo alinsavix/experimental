@@ -1,9 +1,10 @@
 """Camera calibration using ChArUco boards."""
 
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Callable, TYPE_CHECKING
-import numpy as np
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
+
 import cv2
+import numpy as np
 
 from .board_config import BoardConfig
 

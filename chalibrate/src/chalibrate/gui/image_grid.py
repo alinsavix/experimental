@@ -1,14 +1,13 @@
 """Scrollable image grid widget."""
 
 from typing import List, Optional
-from PyQt6.QtWidgets import (
-    QWidget, QScrollArea, QGridLayout, QLabel, QMenu,
-    QVBoxLayout, QFrame
-)
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QAction
+
 import cv2
 import numpy as np
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QAction, QColor, QImage, QPainter, QPen, QPixmap
+from PyQt6.QtWidgets import (QFrame, QGridLayout, QLabel, QMenu, QScrollArea,
+                             QVBoxLayout, QWidget)
 
 from ..core import ImageDetection, ImageQuality
 from ..utils import ImageLoader

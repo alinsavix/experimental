@@ -1,10 +1,11 @@
 """Background worker threads for calibration."""
 
 from typing import List, Tuple
-from PyQt6.QtCore import QObject, QRunnable, pyqtSignal, pyqtSlot
-import numpy as np
 
-from ..core import BoardConfig, Calibrator, CalibrationResult
+import numpy as np
+from PyQt6.QtCore import QObject, QRunnable, pyqtSignal, pyqtSlot
+
+from ..core import BoardConfig, CalibrationResult, Calibrator
 from ..core.calibration_options import CalibrationOptions
 from ..utils import ImageLoader
 
