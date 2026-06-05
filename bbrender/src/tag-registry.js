@@ -37,6 +37,7 @@ export const TAGS = {
   box: styleTag('box'),
   bg: styleTag('bg'),
   center: styleTag('center'),
+  class: styleTag('class'),
   code: styleTag('code'),
   color: styleTag('color'),
   colour: styleTag('colour'),
@@ -59,7 +60,10 @@ export const TAGS = {
   img: { kind: 'self' },
   indent: styleTag('indent'),
   justify: styleTag('justify'),
+  leading: styleTag('leading'),
   left: styleTag('left'),
+  letterspacing: styleTag('letterspacing'),
+  nl: { kind: 'self', nodeType: 'newline' },
   newline: { kind: 'self' },
   noparse: { kind: 'literal' },
   opacity: styleTag('opacity'),
@@ -68,7 +72,6 @@ export const TAGS = {
     apply: TAG_STYLE_HANDLERS.outline,
     autoPadding: textStrokePadding
   },
-  plain: { kind: 'literal' },
   pulse: animationTag('pulse'),
   rainbow: animationTag('rainbow'),
   random: { kind: 'self' },
@@ -90,7 +93,6 @@ export const TAGS = {
   size: styleTag('size'),
   slide: styleTag('slide'),
   small: styleTag('small'),
-  spacing: styleTag('spacing'),
   stroke: {
     kind: 'style',
     apply: TAG_STYLE_HANDLERS.stroke,
@@ -110,7 +112,7 @@ export const TAGS = {
 };
 
 export const KNOWN_TAGS = new Set(Object.keys(TAGS));
-export const RESET_TAGS = new Set(['reset', 'all']);
+export const RESET_TAGS = new Set(['reset']);
 export const NOPARSE_TAGS = tagsByKind('literal');
 export const SELF_TAGS = tagsByKind('self');
 export const ANIMATION_TAGS = tagsByKind('animation');
@@ -123,6 +125,10 @@ export function applyTagStyles(el, name, attrs = {}) {
 
 export function getTagKind(name) {
   return TAGS[name] && TAGS[name].kind;
+}
+
+export function getNodeTypeForSelfTag(name) {
+  return (TAGS[name] && TAGS[name].nodeType) || name;
 }
 
 export function isCharacterWrappedTag(name) {

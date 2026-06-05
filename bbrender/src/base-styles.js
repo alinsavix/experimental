@@ -112,7 +112,7 @@ export function ensureBaseStyles(doc) {
 }
 @keyframes bb-pulse {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.18); }
+  50% { transform: scale(calc(1 + var(--bb-pulse-intensity, 0.18))); }
 }
 @keyframes bb-tornado {
   0% { transform: translate(var(--bb-tornado-radius, 10px), 0); }

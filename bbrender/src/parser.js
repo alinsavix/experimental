@@ -1,4 +1,4 @@
-import { KNOWN_TAGS, NOPARSE_TAGS, RESET_TAGS, SELF_TAGS } from './tag-definitions.js';
+import { KNOWN_TAGS, NOPARSE_TAGS, RESET_TAGS, SELF_TAGS, getNodeTypeForSelfTag } from './tag-definitions.js';
 import { normalizeTagName } from './utils.js';
 
 function createTextNode(value) {
@@ -213,7 +213,8 @@ export function parse(input, options) {
 
     if (SELF_TAGS.has(token.name)) {
       currentChildren().push({
-        type: token.name,
+        type: getNodeTypeForSelfTag(token.name),
+        name: token.name,
         attrs: token.attrs,
         raw: token.raw
       });

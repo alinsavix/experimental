@@ -398,11 +398,6 @@
         return true;
       }
 
-      if (command === 'set_variable') {
-        if (payload.name) rendererState.variables[payload.name] = String(payload.value || '');
-        return true;
-      }
-
       if (command === 'set_preset') {
         if (payload.name) rendererState.presets[payload.name] = String(payload.value || payload.tags || '');
         return true;

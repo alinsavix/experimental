@@ -1,4 +1,4 @@
-import { clampNumber, cssSafeIdent, readSizeOption } from './utils.js';
+import { clampNumber, cssSafeIdent, readLineHeightOption, readSizeOption } from './utils.js';
 
 export const TAG_STYLE_HANDLERS = {
   b(el) {
@@ -17,6 +17,7 @@ export const TAG_STYLE_HANDLERS = {
     el.style.fontFamily = sanitizeFontFamily(attrs.value);
   },
   gfont: applyGoogleFont,
+  class: applyCssClass,
   size(el, attrs) {
     el.style.fontSize = clampNumber(attrs.value, 1, 500, 48) + 'px';
   },
@@ -60,7 +61,7 @@ export const TAG_STYLE_HANDLERS = {
   glow(el, attrs) {
     applyShadow(el, attrs, true);
   },
-  spacing(el, attrs) {
+  letterspacing(el, attrs) {
     el.style.letterSpacing = clampNumber(attrs.value, -50, 100, 0) + 'px';
   },
   align(el, attrs) {
@@ -77,6 +78,10 @@ export const TAG_STYLE_HANDLERS = {
   },
   justify(el) {
     applyAlign(el, 'justify');
+  },
+  leading(el, attrs) {
+    const lineHeight = readLineHeightOption(attrs.value);
+    if (lineHeight) el.style.lineHeight = lineHeight;
   },
   indent(el, attrs) {
     el.style.display = 'block';
@@ -111,6 +116,14 @@ function applyInlineBlock(el) {
   el.style.display = 'inline-block';
 }
 
+function applyCssClass(el, attrs) {
+  const names = String(attrs.value || attrs.name || '')
+    .split(/\s+/)
+    .map((name) => name.replace(/[^a-z0-9_-]/gi, ''))
+    .filter(Boolean);
+  if (names.length) el.classList.add(...names);
+}
+
 export function applyAnimationStyles(el, context, index) {
   const name = context.name;
   const attrs = context.attrs || {};
@@ -136,6 +149,7 @@ export function applyAnimationStyles(el, context, index) {
       setAnimation(el, 'bb-shake', cycleDuration(attrs.rate, 20), 'steps(2, end)');
       break;
     case 'pulse':
+      el.style.setProperty('--bb-pulse-intensity', String(clampNumber(attrs.intensity, 0, 5, 0.18)));
       setAnimation(el, 'bb-pulse', cycleDuration(attrs.freq, 1), 'ease-in-out');
       break;
     case 'tornado':

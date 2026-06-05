@@ -35,6 +35,8 @@ test('visual harness includes new animation and dynamic cases', async ({ page })
   await expect(page.locator('[data-case-id="rotate-metallic"]')).toBeVisible();
   await expect(page.locator('[data-case-id="fire-electric"]')).toBeVisible();
   await expect(page.locator('[data-case-id="random-words"]')).toBeVisible();
+  await expect(page.locator('[data-case-id="leading"]')).toBeVisible();
+  await expect(page.locator('[data-case-id="pulse"]')).toBeVisible();
 });
 
 for (const caseId of staticVisualCaseIds) {

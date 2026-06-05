@@ -78,7 +78,6 @@ export function createState() {
     duration: 4000,
     queueMode: 'replace',
     layout: {},
-    variables: {},
     presets: {}
   };
 }

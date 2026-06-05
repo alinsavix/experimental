@@ -24,13 +24,6 @@
       expected: 'The [b] tags should be visible as text.'
     },
     {
-      id: 'plain-alias',
-      category: 'Special',
-      name: 'Plain Alias',
-      bbcode: '[plain][color=red]literal color tag[/color][/plain]',
-      expected: 'The [color] tags should be visible as text.'
-    },
-    {
       id: 'reset',
       category: 'Special',
       name: 'Reset',
@@ -38,18 +31,26 @@
       expected: 'The reset should close open tags for all following text.'
     },
     {
-      id: 'all-reset',
+      id: 'reset',
       category: 'Special',
-      name: 'All Reset',
-      bbcode: '[b][i]Styled[/all] plain',
-      expected: 'The [/all] marker should reset the open tag stack.'
+      name: 'Reset',
+      bbcode: '[b][i]Styled[reset] plain',
+      expected: 'The [reset] marker should reset the open tag stack.'
     },
     {
       id: 'newline',
       category: 'Special',
       name: 'Newline',
-      bbcode: 'Line one[newline]Line two',
-      expected: 'The [newline] tag should create a line break.'
+      bbcode: 'Line one[newline]Line two[nl]Line three',
+      expected: 'The [newline] and [nl] tags should create line breaks.'
+    },
+    {
+      id: 'leading',
+      category: 'Styling',
+      name: 'Leading',
+      bbcode: '[leading=1.8]Wide leading[newline]Second line[newline]Third line[/leading] [leading=0.8]Tight leading[newline]Fourth line[/leading]',
+      layout: { width: 680, lineHeight: 1.1 },
+      expected: 'The leading tag should change line spacing within each tagged span.'
     },
     {
       id: 'malformed',
@@ -137,10 +138,17 @@
       expected: 'The entire tag contents should blink together, not ripple character by character, and spaces should remain visible.'
     },
     {
+      id: 'pulse',
+      category: 'Animation',
+      name: 'Pulse',
+      bbcode: '[pulse freq=1 intensity=0.35]Pulse intensity test[/pulse]',
+      expected: 'Characters should scale up and down using the configured pulse intensity.'
+    },
+    {
       id: 'shake-pulse-flip',
       category: 'Animation',
       name: 'Shake Pulse Flip',
-      bbcode: '[shake rate=10 level=3][pulse freq=1][flip axis=y speed=0.5]Energy[/flip][/pulse][/shake]',
+      bbcode: '[shake rate=10 level=3][pulse freq=1 intensity=0.35][flip axis=y speed=0.5]Energy[/flip][/pulse][/shake]',
       expected: 'Nested wrappers should let transform animations compose visually.'
     },
     {
@@ -252,7 +260,7 @@
       id: 'google-font',
       category: 'Assets',
       name: 'Google Font',
-      bbcode: '[gfont=Lobster]Google font text[/gfont]',
+      bbcode: '[gfont=Tangerine]Google font text[/gfont]',
       expected: 'The renderer should apply the requested font-family and inject a Google Fonts stylesheet link when the browser can load it.'
     },
     {

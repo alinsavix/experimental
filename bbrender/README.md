@@ -241,7 +241,6 @@ Supported commands:
 | `set_global_tags` | `tags`, `globalTags` | Sets BBCode opening tags wrapped around future messages. |
 | `set_duration` | `duration`, `ms` | Sets the default display duration. |
 | `set_layout` | layout fields | Sets the default source layout. |
-| `set_variable` | `name`, `value` | Stores an in-memory variable value for later variable support. |
 | `set_preset` | `name`, `value`, `tags` | Stores an in-memory preset value for later preset support. |
 
 Examples:
@@ -298,6 +297,7 @@ blur
 bounce
 box
 center
+class
 code
 color / colour
 dropcap
@@ -317,14 +317,17 @@ img
 indent
 justify
 left
+leading
+letterspacing
+nl
 newline
-noparse / plain
+noparse
 opacity
 outline / stroke
 pulse
 rainbow
 random
-reset / all
+reset
 right
 rotate
 s
@@ -333,7 +336,6 @@ shake
 size
 slide
 small
-spacing
 sub
 sup
 tornado
@@ -348,6 +350,9 @@ metallic
 
 Unknown tags render literally and produce diagnostics.
 
+`[class=name]...[/class]` adds `name` as a CSS class on the generated tag
+span. Use this when external overlay CSS should style a BBCode range.
+
 ## Current Limitations
 
 - Queue mode is configured by URL only: `?queue=1` or `?mode=queue`.
@@ -355,8 +360,8 @@ Unknown tags render literally and produce diagnostics.
   `set_global_tags` command, not as a per-message option.
 - WebSocket payload layout options must be top-level fields. Nested
   `layout: { ... }` is currently ignored.
-- `set_variable` and `set_preset` store values in memory, but `[var]` and
-  `[use]` rendering are not implemented yet.
+- `set_preset` stores values in memory for later preset support, but preset
+  expansion is not implemented yet.
 - The docs in `docs/` are upstream reference material and may describe tags
   that this renderer has not implemented yet. `FEATURES.md` tracks coverage.
 

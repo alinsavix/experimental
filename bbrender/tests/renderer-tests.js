@@ -52,8 +52,20 @@ export function runRendererTests(BBRender, doc = document) {
     assert('stroke tag applies text stroke', stroked.querySelector('[data-bb-tag="stroke"]').style.webkitTextStroke === '3px black');
 
     const spaced = doc.createElement('div');
-    BBRender.renderToElement(spaced, '[b][i]Styled[/all] plain [color=dodger-blue]Blue[/color] [opacity=0.45]Faded[/opacity]');
+    BBRender.renderToElement(spaced, '[b][i]Styled[reset] plain [color=dodger-blue]Blue[/color] [opacity=0.45]Faded[/opacity]');
     assert('renderer preserves spaces between styled spans', spaced.textContent.includes('Styled plain Blue Faded'));
+
+    const letterSpaced = doc.createElement('div');
+    BBRender.renderToElement(letterSpaced, '[letterspacing=8]wide[/letterspacing]');
+    assert('letterspacing applies CSS letter spacing', letterSpaced.querySelector('[data-bb-tag="letterspacing"]').style.letterSpacing === '8px');
+
+    const leaded = doc.createElement('div');
+    BBRender.renderToElement(leaded, '[leading=1.4]Line one[nl]Line two[/leading]');
+    assert('leading applies CSS line height', leaded.querySelector('[data-bb-tag="leading"]').style.lineHeight === '1.4');
+
+    const classed = doc.createElement('div');
+    BBRender.renderToElement(classed, '[class=alert]styled by CSS[/class]');
+    assert('class tag adds requested CSS class', classed.querySelector('[data-bb-tag="class"]').classList.contains('alert'));
   });
 
   section('animations', () => {
@@ -73,6 +85,10 @@ export function runRendererTests(BBRender, doc = document) {
     BBRender.renderToElement(flipped, '[flip axis=x]x[/flip][flip axis=y]y[/flip]');
     assert('flip x animation is assigned', flipped.querySelector('[data-bb-anim="flip"]').style.animation.includes('bb-flip-x'));
     assert('flip y animation is assigned', flipped.querySelectorAll('[data-bb-anim="flip"]')[1].style.animation.includes('bb-flip-y'));
+
+    const pulsed = doc.createElement('div');
+    BBRender.renderToElement(pulsed, '[pulse freq=1 intensity=0.4]p[/pulse]');
+    assert('pulse intensity is assigned', pulsed.querySelector('[data-bb-anim="pulse"]').style.getPropertyValue('--bb-pulse-intensity') === '0.4');
 
     const spun = doc.createElement('div');
     BBRender.renderToElement(spun, '[rotate speed=45]go[/rotate]');
@@ -176,6 +192,16 @@ export function runRendererTests(BBRender, doc = document) {
     BBRender.renderToElement(randomed, '[random words="Hello,Hi,Hey" speed=2]');
     assert('random tag creates dynamic span', randomed.querySelector('[data-bb-tag="random"]') !== null);
     assert('random tag chooses one configured word', ['Hello', 'Hi', 'Hey'].includes(randomed.textContent));
+  });
+
+  section('special tags', () => {
+    const lined = doc.createElement('div');
+    BBRender.renderToElement(lined, 'Line one[nl]Line two');
+    assert('nl alias creates newline br', lined.querySelector('br') !== null);
+
+    const reset = doc.createElement('div');
+    BBRender.renderToElement(reset, '[b]Bold[reset]Plain');
+    assert('reset clears open tag stack', reset.textContent === 'BoldPlain' && reset.querySelector('[data-bb-tag="b"]').textContent === 'Bold');
   });
 
   section('diagnostics and payloads', () => {
