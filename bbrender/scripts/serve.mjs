@@ -38,7 +38,7 @@ const server = createServer((request, response) => {
 
   let filePath = requestedPath;
   if (existsSync(filePath) && statSync(filePath).isDirectory()) {
-    filePath = path.join(filePath, 'bbrender.html');
+    filePath = path.join(filePath, 'sb_bbrender.html');
   }
 
   if (!existsSync(filePath) || !statSync(filePath).isFile()) {

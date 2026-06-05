@@ -1,8 +1,12 @@
+import { chooseRandomWord, parseRandomWords } from './tag-styles.js';
 import { clampNumber, createSeededRandom, parseBoolean, randomGlyph, readDatasetAttrs, splitGraphemes } from './utils.js';
 
 export function clearRuntimeEffects(element) {
   const timers = element.__bbCodeRuntimeTimers || [];
-  timers.forEach((timer) => clearTimeout(timer));
+  timers.forEach((timer) => {
+    clearTimeout(timer);
+    clearInterval(timer);
+  });
   element.__bbCodeRuntimeTimers = [];
 }
 
@@ -59,6 +63,7 @@ export function startRuntimeEffects(element) {
   const view = doc.defaultView || globalThis;
   const typewriterTags = Array.from(element.querySelectorAll('[data-bb-tag="typewriter"]'));
   const hackerTags = Array.from(element.querySelectorAll('[data-bb-tag="hacker"]'));
+  const randomTags = Array.from(element.querySelectorAll('[data-bb-tag="random"]'));
 
   typewriterTags.forEach((tag) => {
     const attrs = readDatasetAttrs(tag);
@@ -106,6 +111,17 @@ export function startRuntimeEffects(element) {
         if (wrapper) wrapper.style.filter = '';
       }, (charIndex + loops + 1) * stepMs));
     });
+  });
+
+  randomTags.forEach((tag) => {
+    const attrs = readDatasetAttrs(tag);
+    const words = parseRandomWords(attrs.words || attrs.value);
+    const speed = clampNumber(attrs.speed, 0.1, 60, 2);
+    const stepMs = Math.max(16, 1000 / speed);
+    tag.textContent = chooseRandomWord(words);
+    timers.push(view.setInterval(() => {
+      tag.textContent = chooseRandomWord(words);
+    }, stepMs));
   });
 
   element.__bbCodeRuntimeTimers = timers;

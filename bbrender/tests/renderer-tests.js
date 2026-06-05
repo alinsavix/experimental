@@ -73,6 +73,17 @@ export function runRendererTests(BBRender, doc = document) {
     BBRender.renderToElement(flipped, '[flip axis=x]x[/flip][flip axis=y]y[/flip]');
     assert('flip x animation is assigned', flipped.querySelector('[data-bb-anim="flip"]').style.animation.includes('bb-flip-x'));
     assert('flip y animation is assigned', flipped.querySelectorAll('[data-bb-anim="flip"]')[1].style.animation.includes('bb-flip-y'));
+
+    const spun = doc.createElement('div');
+    BBRender.renderToElement(spun, '[rotate speed=45]go[/rotate]');
+    assert('rotate creates animation wrappers', spun.querySelectorAll('[data-bb-anim="rotate"]').length === 2);
+    assert('rotate animation is assigned', spun.querySelector('[data-bb-anim="rotate"]').style.animation.includes('bb-rotate'));
+
+    const metallic = doc.createElement('div');
+    BBRender.renderToElement(metallic, '[metallic speed=2][color=gold]Au[/color][/metallic]');
+    assert('metallic creates animation wrappers', metallic.querySelectorAll('[data-bb-anim="metallic"]').length === 2);
+    assert('metallic sheen animation is assigned', metallic.querySelector('[data-bb-anim="metallic"]').style.animation.includes('bb-metallic'));
+    assert('metallic clips gradient to text', metallic.querySelector('[data-bb-anim="metallic"]').style.webkitBackgroundClip === 'text');
   });
 
   section('character effects', () => {
@@ -93,6 +104,16 @@ export function runRendererTests(BBRender, doc = document) {
     const fadedChars = faded.querySelectorAll('[data-bb-effect="fade"]');
     assert('fade creates per-character wrappers', fadedChars.length === 3);
     assert('fade opacity ramp starts after configured index', fadedChars[0].style.opacity === '1' && fadedChars[2].style.opacity === '0.5');
+
+    const burning = doc.createElement('div');
+    BBRender.renderToElement(burning, '[fire intensity=0.5]hot[/fire]');
+    assert('fire creates effect wrappers', burning.querySelectorAll('[data-bb-effect="fire"]').length === 3);
+    assert('fire animation is assigned', burning.querySelector('[data-bb-effect="fire"]').style.animation.includes('bb-fire'));
+
+    const zapped = doc.createElement('div');
+    BBRender.renderToElement(zapped, '[electric freq=10 intensity=5]zap[/electric]');
+    assert('electric creates effect wrappers', zapped.querySelectorAll('[data-bb-effect="electric"]').length === 3);
+    assert('electric animation is assigned', zapped.querySelector('[data-bb-effect="electric"]').style.animation.includes('bb-electric'));
   });
 
   section('motion and layout', () => {
@@ -150,6 +171,11 @@ export function runRendererTests(BBRender, doc = document) {
     const img = imaged.querySelector('img.bb-img');
     assert('image tag creates img element', img !== null);
     assert('image dimensions apply', img.style.width === '32px' && img.style.height === '24px');
+
+    const randomed = doc.createElement('div');
+    BBRender.renderToElement(randomed, '[random words="Hello,Hi,Hey" speed=2]');
+    assert('random tag creates dynamic span', randomed.querySelector('[data-bb-tag="random"]') !== null);
+    assert('random tag chooses one configured word', ['Hello', 'Hi', 'Hey'].includes(randomed.textContent));
   });
 
   section('diagnostics and payloads', () => {

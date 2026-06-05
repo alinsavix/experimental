@@ -96,6 +96,8 @@ export const TAG_STYLE_HANDLERS = {
   },
   typewriter: applyInlineBlock,
   hacker: applyInlineBlock,
+  fire: applyInlineBlock,
+  electric: applyInlineBlock,
   fade: applyInlineBlock,
   slide: applySlide,
   zoom: applyZoom
@@ -143,6 +145,17 @@ export function applyAnimationStyles(el, context, index) {
     case 'rainbow':
       setAnimation(el, 'bb-rainbow', Math.max(0.2, 4 / clampNumber(attrs.speed, 0.1, 20, 1)), 'linear');
       break;
+    case 'rotate':
+      setAnimation(el, 'bb-rotate', Math.max(0.05, 360 / clampNumber(attrs.speed, 1, 1440, 45)), 'linear');
+      break;
+    case 'metallic':
+      el.style.backgroundImage = 'linear-gradient(105deg, color-mix(in srgb, currentColor 55%, black) 0%, currentColor 30%, color-mix(in srgb, currentColor 15%, white) 44%, #ffffff 52%, currentColor 64%, color-mix(in srgb, currentColor 45%, black) 100%)';
+      el.style.backgroundSize = '240% 100%';
+      el.style.webkitBackgroundClip = 'text';
+      el.style.backgroundClip = 'text';
+      el.style.webkitTextFillColor = 'transparent';
+      setAnimation(el, 'bb-metallic', Math.max(0.05, 1 / clampNumber(attrs.speed, 0.05, 60, 2)), 'linear');
+      break;
     case 'blink':
       setAnimation(el, 'bb-blink', cycleDuration(attrs.freq, 2), 'steps(1, end)');
       break;
@@ -179,6 +192,34 @@ export function applyCharacterEffectStyles(el, context, index, grapheme) {
       if (!isSpace) {
         el.style.filter = 'drop-shadow(0 0 0.2em currentColor)';
       }
+      break;
+    }
+    case 'fire': {
+      const intensity = clampNumber(attrs.intensity, 0, 1, 0.5);
+      el.style.setProperty('--bb-fire-glow', (intensity * 0.25).toFixed(3) + 'em');
+      el.style.setProperty('--bb-fire-flare', (intensity * 0.45).toFixed(3) + 'em');
+      el.style.setProperty('--bb-fire-hot-glow', (intensity * 0.35).toFixed(3) + 'em');
+      el.style.setProperty('--bb-fire-hot-flare', (intensity * 0.7).toFixed(3) + 'em');
+      el.style.setProperty('--bb-fire-low-glow', (intensity * 0.22).toFixed(3) + 'em');
+      el.style.setProperty('--bb-fire-low-flare', (intensity * 0.55).toFixed(3) + 'em');
+      el.style.willChange = 'color, filter, text-shadow';
+      el.style.animation = 'bb-fire ' + Math.max(0.12, 0.58 - intensity * 0.32) + 's ease-in-out ' + (-index * 0.037) + 's infinite both';
+      break;
+    }
+    case 'electric': {
+      const intensity = clampNumber(attrs.intensity, 0, 80, 5);
+      el.style.setProperty('--bb-electric-x1', (intensity * 0.5).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-y1', (intensity * -0.25).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-x2', (intensity * -0.35).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-y2', (intensity * 0.2).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-x3', (intensity * 0.12).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-y3', (intensity * 0.35).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-sx1', (intensity * -0.18).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-sx2', (intensity * 0.22).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-sx3', (intensity * 0.2).toFixed(2) + 'px');
+      el.style.setProperty('--bb-electric-sx4', (intensity * -0.16).toFixed(2) + 'px');
+      el.style.willChange = 'transform, filter, text-shadow';
+      el.style.animation = 'bb-electric ' + cycleDuration(attrs.freq, 10) + 's steps(2, end) ' + (-index * 0.019) + 's infinite both';
       break;
     }
     case 'fade': {
@@ -423,6 +464,18 @@ export function createImageElement(doc, attrs) {
   return img;
 }
 
+export function createRandomElement(doc, attrs) {
+  const el = doc.createElement('span');
+  el.className = 'bb-random';
+  el.dataset.bbTag = 'random';
+  Object.keys(attrs || {}).forEach((key) => {
+    el.dataset['bbAttr' + key.replace(/(^|-)([a-z0-9])/g, (_, _dash, ch) => ch.toUpperCase())] = String(attrs[key]);
+  });
+  const words = parseRandomWords(attrs.words || attrs.value);
+  el.textContent = chooseRandomWord(words);
+  return el;
+}
+
 function normalizeImageSrc(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -430,4 +483,47 @@ function normalizeImageSrc(value) {
   if (/^[a-z]:[\\/]/i.test(raw)) return 'file:///' + raw.replace(/\\/g, '/');
   if (/^[./]/.test(raw)) return raw;
   return '';
+}
+
+export function parseRandomWords(value) {
+  const source = String(value || '');
+  const words = [];
+  let current = '';
+  let quote = '';
+
+  for (let index = 0; index < source.length; index++) {
+    const ch = source[index];
+    if (ch === '\\' && index + 1 < source.length) {
+      current += source[++index];
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = '';
+      else current += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ',') {
+      pushRandomWord(words, current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+
+  pushRandomWord(words, current);
+  return words.length ? words : [''];
+}
+
+export function chooseRandomWord(words) {
+  const list = Array.isArray(words) && words.length ? words : [''];
+  return list[Math.floor(Math.random() * list.length)] || '';
+}
+
+function pushRandomWord(words, value) {
+  const word = String(value || '').trim();
+  if (word) words.push(word);
 }

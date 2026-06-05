@@ -41,7 +41,9 @@ export const TAGS = {
   color: styleTag('color'),
   colour: styleTag('colour'),
   dropcap: styleTag('dropcap'),
+  electric: effectTag('electric'),
   fade: effectTag('fade'),
+  fire: effectTag('fire'),
   font: styleTag('font'),
   gfont: styleTag('gfont'),
   glow: {
@@ -69,8 +71,10 @@ export const TAGS = {
   plain: { kind: 'literal' },
   pulse: animationTag('pulse'),
   rainbow: animationTag('rainbow'),
+  random: { kind: 'self' },
   reset: { kind: 'reset' },
   right: styleTag('right'),
+  rotate: animationTag('rotate'),
   s: styleTag('s'),
   shadow: {
     kind: 'style',
@@ -101,6 +105,7 @@ export const TAGS = {
   wave: animationTag('wave', (attrs) => clampNumber(attrs.amp, 0, 300, 50)),
   wrap: styleTag('wrap'),
   flip: animationTag('flip'),
+  metallic: animationTag('metallic'),
   zoom: styleTag('zoom')
 };
 

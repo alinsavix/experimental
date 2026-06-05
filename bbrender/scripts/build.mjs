@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, '..');
 const distRoot = path.join(projectRoot, 'dist');
-const sourceHtmlPath = path.join(projectRoot, 'bbrender.html');
+const adapterHtmlFile = 'sb_bbrender.html';
+const sourceHtmlPath = path.join(projectRoot, adapterHtmlFile);
 const packageJsonPath = path.join(projectRoot, 'package.json');
 const vendorClientPath = path.join(projectRoot, 'vendor', 'streamerbot-client.js');
 const vendorClientMetaPath = path.join(projectRoot, 'vendor', 'streamerbot-client.json');
@@ -93,10 +94,10 @@ export function build() {
     .replace(/<style>[\s\S]*?<\/style>/i, `<style>\n${css.trim()}\n  </style>`)
     .replace(/<script\s+type="module">[\s\S]*?<\/script>/i, `<script>\n${bundledJs}</script>`);
 
-  writeFileSync(path.join(separateDir, 'bbrender.html'), separateHtml, 'utf8');
+  writeFileSync(path.join(separateDir, adapterHtmlFile), separateHtml, 'utf8');
   writeFileSync(path.join(separateDir, 'bbrender.css'), cssText, 'utf8');
   writeFileSync(path.join(separateDir, 'bbrender.js'), bundledJs, 'utf8');
-  writeFileSync(path.join(packedDir, 'bbrender.html'), packedHtml, 'utf8');
+  writeFileSync(path.join(packedDir, adapterHtmlFile), packedHtml, 'utf8');
 
   const cssHash = shortHash(cssText);
   const jsHash = shortHash(bundledJs);
@@ -106,14 +107,14 @@ export function build() {
     .replace(/<style>[\s\S]*?<\/style>/i, `<link rel="stylesheet" href="./assets/${cdnCssFile}">`)
     .replace(/<script\s+type="module">[\s\S]*?<\/script>/i, `<script src="./assets/${cdnJsFile}"></script>`);
 
-  writeFileSync(path.join(cdnDir, 'bbrender.html'), cdnHtml, 'utf8');
+  writeFileSync(path.join(cdnDir, adapterHtmlFile), cdnHtml, 'utf8');
   writeFileSync(path.join(cdnAssetsDir, cdnCssFile), cssText, 'utf8');
   writeFileSync(path.join(cdnAssetsDir, cdnJsFile), bundledJs, 'utf8');
   writeFileSync(path.join(cdnDir, 'manifest.json'), JSON.stringify({
     name: packageInfo.name || 'bbrender',
     version: packageInfo.version || '0.0.0',
     generatedAt: new Date().toISOString(),
-    entrypoint: 'bbrender.html',
+    entrypoint: adapterHtmlFile,
     assets: {
       css: `assets/${cdnCssFile}`,
       js: `assets/${cdnJsFile}`
@@ -144,7 +145,7 @@ export function build() {
   }, null, 2) + '\n', 'utf8');
 
   return {
-    packed: path.join(packedDir, 'bbrender.html'),
+    packed: path.join(packedDir, adapterHtmlFile),
     separate: separateDir,
     cdn: cdnDir
   };
@@ -175,7 +176,7 @@ function stripModuleSyntax(source) {
 
 function extractBlock(source, pattern, label) {
   const match = source.match(pattern);
-  if (!match) throw new Error(`Could not find ${label} block in bbrender.html`);
+  if (!match) throw new Error(`Could not find ${label} block in ${adapterHtmlFile}`);
   return match[1];
 }
 

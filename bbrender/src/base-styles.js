@@ -130,6 +130,53 @@ export function ensureBaseStyles(doc) {
   80% { color: #5856d6; }
   100% { color: #ff3b30; }
 }
+@keyframes bb-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes bb-metallic {
+  from { background-position: 180% 50%; }
+  to { background-position: -80% 50%; }
+}
+@keyframes bb-fire {
+  0%, 100% {
+    color: #ffd76a;
+    text-shadow: 0 0 var(--bb-fire-glow, 0.125em) #ffb000, 0 -0.04em var(--bb-fire-flare, 0.225em) #ff4b00;
+    filter: saturate(1.15);
+  }
+  35% {
+    color: #ff8a00;
+    text-shadow: 0 0 var(--bb-fire-hot-glow, 0.175em) #ffd000, 0 -0.08em var(--bb-fire-hot-flare, 0.35em) #ff2f00;
+    filter: saturate(1.45);
+  }
+  70% {
+    color: #ff3b1f;
+    text-shadow: 0 0 var(--bb-fire-low-glow, 0.11em) #ff9900, 0 -0.12em var(--bb-fire-low-flare, 0.275em) #ffea00;
+    filter: saturate(1.3);
+  }
+}
+@keyframes bb-electric {
+  0%, 100% {
+    transform: translate(0, 0);
+    text-shadow: 0 0 0.12em currentColor, 0 0 0.45em #69e7ff;
+    filter: brightness(1);
+  }
+  20% {
+    transform: translate(var(--bb-electric-x1, 2.5px), var(--bb-electric-y1, -1.25px));
+    text-shadow: var(--bb-electric-sx1, -0.9px) 0 #ffffff, var(--bb-electric-sx2, 1.1px) 0 #47dfff, 0 0 0.55em #89f5ff;
+    filter: brightness(1.6);
+  }
+  45% {
+    transform: translate(var(--bb-electric-x2, -1.75px), var(--bb-electric-y2, 1px));
+    text-shadow: var(--bb-electric-sx3, 1px) 0 #ffffff, var(--bb-electric-sx4, -0.8px) 0 #4f6dff, 0 0 0.5em #b7fbff;
+    filter: brightness(1.25);
+  }
+  70% {
+    transform: translate(var(--bb-electric-x3, 0.6px), var(--bb-electric-y3, 1.75px));
+    text-shadow: 0 0 0.2em #ffffff, 0 0 0.7em #6af0ff;
+    filter: brightness(1.8);
+  }
+}
 @keyframes bb-blink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }

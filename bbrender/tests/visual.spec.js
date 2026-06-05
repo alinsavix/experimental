@@ -29,6 +29,14 @@ test('browser renderer checks pass', async ({ page }) => {
   expect(summary.passed).toBeGreaterThan(0);
 });
 
+test('visual harness includes new animation and dynamic cases', async ({ page }) => {
+  await page.goto('/tests/visual-harness.html');
+
+  await expect(page.locator('[data-case-id="rotate-metallic"]')).toBeVisible();
+  await expect(page.locator('[data-case-id="fire-electric"]')).toBeVisible();
+  await expect(page.locator('[data-case-id="random-words"]')).toBeVisible();
+});
+
 for (const caseId of staticVisualCaseIds) {
   test(`static visual case: ${caseId}`, async ({ page }) => {
     await page.goto(`/tests/visual-harness.html?case=${encodeURIComponent(caseId)}`);

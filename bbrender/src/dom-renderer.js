@@ -1,6 +1,6 @@
 import { ensureBaseStyles } from './base-styles.js';
 import { ANIMATION_TAGS, CHARACTER_EFFECT_TAGS, applyTagStyles, isCharacterWrappedTag } from './tag-registry.js';
-import { applyAnimationStyles, applyCharacterEffectStyles, createImageElement } from './tag-styles.js';
+import { applyAnimationStyles, applyCharacterEffectStyles, createImageElement, createRandomElement } from './tag-styles.js';
 import { cssSafeIdent, splitGraphemes, toDatasetName } from './utils.js';
 
 export function renderToFragment(ast, documentRef = document) {
@@ -35,6 +35,11 @@ function appendNodes(parent, nodes, doc, animationContexts, renderState) {
     if (node.type === 'img') {
       const img = createImageElement(doc, node.attrs || {});
       if (img) parent.appendChild(img);
+      return;
+    }
+
+    if (node.type === 'random') {
+      parent.appendChild(createRandomElement(doc, node.attrs || {}));
       return;
     }
 

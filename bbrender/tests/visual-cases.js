@@ -123,6 +123,13 @@
       expected: 'Characters should cycle through rainbow colors with staggered offsets and preserve word spaces.'
     },
     {
+      id: 'rotate-metallic',
+      category: 'Animation',
+      name: 'Rotate Metallic',
+      bbcode: '[rotate speed=90]Spin[/rotate] [metallic speed=2][color=gold]Gold sheen[/color][/metallic]',
+      expected: 'Rotate should spin each character, and metallic should show a moving clipped sheen.'
+    },
+    {
       id: 'blink',
       category: 'Animation',
       name: 'Blink',
@@ -170,6 +177,13 @@
       name: 'Fade Ramp',
       bbcode: '[fade start=3 length=12]First letters solid, later letters fade[/fade]',
       expected: 'The opacity should ramp down per character after the configured start index.'
+    },
+    {
+      id: 'fire-electric',
+      category: 'Effects',
+      name: 'Fire Electric',
+      bbcode: '[fire intensity=0.7]Burning[/fire] [electric freq=10 intensity=5][color=#89b4fa]Electric[/color][/electric]',
+      expected: 'Fire should flicker through warm colors, while electric jitters with bright sparks.'
     },
     {
       id: 'slide-directions',
@@ -240,6 +254,13 @@
       name: 'Google Font',
       bbcode: '[gfont=Lobster]Google font text[/gfont]',
       expected: 'The renderer should apply the requested font-family and inject a Google Fonts stylesheet link when the browser can load it.'
+    },
+    {
+      id: 'random-words',
+      category: 'Dynamic',
+      name: 'Random Words',
+      bbcode: 'Random greeting: [random words="Hello,Hi,Hey,Yo" speed=2]',
+      expected: 'The dynamic span should display one of the configured words and update at random.'
     },
     {
       id: 'inline-image',
