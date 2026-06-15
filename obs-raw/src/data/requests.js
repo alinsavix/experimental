@@ -21,6 +21,38 @@ function categoryToGroup(cat) {
   return cat.replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+// Order of sections in the left-hand request list. Edit this to reorder them.
+// Names must match the group titles (see categoryToGroup above). Any group not
+// listed here is placed at the bottom, keeping its original protocol order.
+export const groupOrder = [
+  'General',
+  'Configuration',
+  'Sources',
+  'Scenes',
+  'Scene Items',
+  'Inputs',
+  'Transitions',
+  'Filters',
+  'Outputs',
+  'Stream',
+  'Record',
+  'Media Inputs',
+  'UI',
+]
+
+function groupRank(group) {
+  const i = groupOrder.indexOf(group)
+  return i === -1 ? Infinity : i
+}
+
+// Params that only apply to newer OBS versions. Maps a param name to a request
+// that must be present in OBS's availableRequests for the param to be relevant.
+// Such params are hidden when connected to an OBS that lacks that request.
+// e.g. canvasUuid only matters where multi-canvas support exists (GetCanvasList).
+export const paramRequiresRequest = {
+  canvasUuid: 'GetCanvasList',
+}
+
 function mapType(t) {
   return t === 'Any' ? 'Object' : t
 }
@@ -38,6 +70,12 @@ function buildParams(requestFields, paramEnrichments = {}) {
       description: f.valueDescription,
       required: !f.valueOptional,
       ...enrichment,
+    }
+
+    // Tag version-gated params (e.g. canvasUuid) so the UI can hide them when
+    // connected to an OBS that doesn't support the corresponding feature.
+    if (paramRequiresRequest[f.valueName] && !param.requiresRequest) {
+      param.requiresRequest = paramRequiresRequest[f.valueName]
     }
 
     // Auto-nest dotted sub-fields under their parent Object field, unless the
@@ -59,14 +97,18 @@ function buildParams(requestFields, paramEnrichments = {}) {
   })
 }
 
-export const requests = proto.requests.map((r) => {
-  const enrichment = enrichments[r.requestType] ?? {}
-  return {
-    name: r.requestType,
-    description: enrichment.description ?? r.description,
-    group: categoryToGroup(r.category),
-    ...(r.requestFields.length
-      ? { params: buildParams(r.requestFields, enrichment.params) }
-      : {}),
-  }
-})
+export const requests = proto.requests
+  .map((r) => {
+    const enrichment = enrichments[r.requestType] ?? {}
+    return {
+      name: r.requestType,
+      description: enrichment.description ?? r.description,
+      group: categoryToGroup(r.category),
+      ...(r.requestFields.length
+        ? { params: buildParams(r.requestFields, enrichment.params) }
+        : {}),
+    }
+  })
+  // Stable sort by groupOrder; within a group the original order is preserved,
+  // which keeps each group's requests contiguous for the list subheaders.
+  .sort((a, b) => groupRank(a.group) - groupRank(b.group))

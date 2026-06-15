@@ -14,12 +14,12 @@
           v-if="request.group !== filteredRequests[index - 1]?.group"
           class="bg-grey-darken-4 mt-3"
         >
-          <span class="text-primary text-uppercase font-weight-bold">{{ request.group }}</span>
+          <span class="section-heading text-primary text-uppercase font-weight-bold">{{ request.group }}</span>
         </v-list-subheader>
         <v-list-item
           :active="modelValue?.name === request.name"
           :disabled="obsInfo && !obsInfo.availableRequests?.includes(request.name)"
-          color="primary"
+          color="amber"
           :href="`#${request.name}`"
           @click="modelValue = request"
         >
@@ -61,5 +61,16 @@ const filteredRequests = computed(() => {
 <style scoped>
 .request-list {
   max-height: calc(100vh - 120px);
+}
+
+/* Section headings: a touch larger than Vuetify's default subheader text. */
+.section-heading {
+  font-size: 1rem;
+}
+
+/* Vuetify hardcodes disabled list items to opacity 0.6, which is too bright
+   against the dark theme. Dim unavailable requests further. */
+.request-list :deep(.v-list-item--disabled) {
+  opacity: 0.35;
 }
 </style>

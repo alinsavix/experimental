@@ -1,11 +1,20 @@
 // Dynamic option helpers — receive (obs, ctx) where ctx = { ...request, params: currentParams }
 
+// Case-insensitive, natural-order sort for alphabetized option lists.
+const byName = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true })
+
 async function getInputNames(obs) {
-  return (await obs.call('GetInputList')).inputs.map((i) => i.inputName)
+  return (await obs.call('GetInputList')).inputs.map((i) => i.inputName).sort(byName)
 }
 
 async function getSceneNames(obs) {
-  return (await obs.call('GetSceneList')).scenes.map((s) => s.sceneName)
+  // GetSceneList orders scenes by ascending sceneIndex, which is the reverse of
+  // the OBS scene-list dock (index 0 is the bottom item). Sort by sceneIndex
+  // descending so the dropdown matches OBS's top-to-bottom order.
+  return (await obs.call('GetSceneList')).scenes
+    .slice()
+    .sort((a, b) => b.sceneIndex - a.sceneIndex)
+    .map((s) => s.sceneName)
 }
 
 async function getOutputNames(obs) {
@@ -21,7 +30,7 @@ async function getProfileNames(obs) {
 }
 
 async function getInputKinds(obs) {
-  return [...new Set((await obs.call('GetInputList')).inputs.map((i) => i.inputKind))]
+  return [...new Set((await obs.call('GetInputList')).inputs.map((i) => i.inputKind))].sort(byName)
 }
 
 async function getSupportedImageFormats(obs) {
@@ -38,16 +47,22 @@ async function getFilterNames(obs, ctx) {
   return (await obs.call('GetSourceFilterList', { sourceName })).filters.map((f) => f.filterName)
 }
 
+async function fetchSceneItemSources(obs, sceneName) {
+  // Scene order (z-order) as OBS returns it.
+  return (await obs.call('GetSceneItemList', { sceneName })).sceneItems.map((i) => i.sourceName)
+}
+
 async function getSceneItemSources(obs, ctx) {
   const sceneName = ctx?.params?.find((p) => p.name === 'sceneName')?.value
   if (!sceneName) return []
-  return (await obs.call('GetSceneItemList', { sceneName })).sceneItems.map((i) => i.sourceName)
+  return (await fetchSceneItemSources(obs, sceneName)).sort(byName)
 }
 
 async function getSceneItemIds(obs, ctx) {
   const sceneName = ctx?.params?.find((p) => p.name === 'sceneName')?.value
   if (!sceneName) return []
-  const sources = await getSceneItemSources(obs, ctx)
+  // Keep scene (z-)order here rather than the alphabetized sourceName order.
+  const sources = await fetchSceneItemSources(obs, sceneName)
   const items = []
   for (const sourceName of sources) {
     const { sceneItemId } = await obs.call('GetSceneItemId', { sceneName, sourceName })

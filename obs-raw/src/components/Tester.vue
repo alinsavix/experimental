@@ -3,7 +3,7 @@
   <v-toolbar density="compact" color="#1d1d1d">
     <span class="d-flex flex-column mx-5">
       <span>OBS Raw Generator</span>
-      <small class="text-grey">for Streamer.bot</small>
+      <small class="text-grey">...but actually maintained</small>
     </span>
 
     <v-spacer />
@@ -30,7 +30,7 @@
           class="mr-2 my-1"
           hide-details
           :disabled="isConnected"
-          style="min-width: 75px"
+          style="min-width: 110px"
         />
         <v-text-field
           v-model="password"
@@ -125,7 +125,7 @@
               <v-slide-y-transition group>
                 <template v-if="selectedRequest">
                   <v-sheet
-                    v-for="(param, index) in currentParams"
+                    v-for="(param, index) in displayParams"
                     :key="index"
                     class="rounded-lg my-3 pa-2"
                   >
@@ -139,7 +139,7 @@
                         class="ml-2"
                         color="error"
                         :disabled="param.required"
-                        @click="removeParam(index)"
+                        @click="removeParam(param)"
                       >
                         <v-icon size="small">mdi-close-circle</v-icon>
                       </v-btn>
@@ -294,6 +294,16 @@ const currentParams = computed(() => {
   return paramState.value[selectedRequest.value.name] ?? []
 })
 
+// Params actually shown/sent: version-gated params (e.g. canvasUuid) are hidden
+// when connected to an OBS that lacks the required request. While disconnected
+// we can't tell, so everything is shown.
+const displayParams = computed(() =>
+  currentParams.value.filter((p) => {
+    if (!p.requiresRequest || !obsInfo.value) return true
+    return obsInfo.value.availableRequests?.includes(p.requiresRequest) ?? false
+  }),
+)
+
 // Preview of the generated Streamer.bot OBS Raw request
 const preview = computed(() => {
   return buildRequestPayload('streamerbot_raw', selectedRequest.value?.name ?? '', buildData())
@@ -336,9 +346,9 @@ function convertValue(param) {
 }
 
 function buildData() {
-  if (!selectedRequest.value || !currentParams.value) return {}
+  if (!selectedRequest.value) return {}
   const data = {}
-  currentParams.value.forEach((p) => {
+  displayParams.value.forEach((p) => {
     data[p.name] = convertValue(p)
   })
   return data
@@ -439,9 +449,11 @@ function addParam() {
   })
 }
 
-function removeParam(index) {
-  if (!selectedRequest.value) return
-  paramState.value[selectedRequest.value.name].splice(index, 1)
+function removeParam(param) {
+  const arr = paramState.value[selectedRequest.value?.name]
+  if (!arr) return
+  const i = arr.indexOf(param)
+  if (i !== -1) arr.splice(i, 1)
 }
 
 // -------------------------------------------------------------------
