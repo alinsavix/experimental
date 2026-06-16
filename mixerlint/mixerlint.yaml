@@ -1,0 +1,178 @@
+# mixerlint.yaml — Configuration for mixerlint.py
+#
+# Each key under "checks" enables a lint check and configures its rules.
+# Omit a section entirely (or set enabled: false) to skip that check.
+
+mixer:
+  host: "192.168.0.28"
+  port: 10024    # XR18 OSC port (X32 uses 10023)
+  timeout: 0.3   # seconds to wait per OSC response
+
+
+checks:
+
+  # ---------------------------------------------------------------------------
+  # pan_center
+  #   Warns when a non-stereo-linked channel's pan is not centered.
+  #   Good for finding channels accidentally nudged off-center.
+  # ---------------------------------------------------------------------------
+  pan_center:
+    enabled: true
+    pan_tolerance: 0.03       # fader units each side of 0.5 (0.03 ≈ L12/R12)
+    skip_muted_channels: true # ignore channels that are muted
+    skip_channels: []         # channel numbers (1-based) to never check
+    # skip_channels: [3, 4]   # e.g., skip a stereo room mic pair
+
+
+  # ---------------------------------------------------------------------------
+  # stereo_balance
+  #   For named L/R channel pairs, warns if the main faders differ significantly.
+  #   Useful when you manually pair channels rather than using hardware linking.
+  #   The pan_center check automatically skips channels listed as pair members.
+  # ---------------------------------------------------------------------------
+  stereo_balance:
+    enabled: true
+    tolerance_db: 3.0    # max acceptable difference in dB
+    pairs:
+      - left: 5
+        right: 6
+        name: "System"
+      - left: 7
+        right: 8
+        name: "Game"
+      - left: 9
+        right: 10
+        name: "Music"
+      - left: 11
+        right: 12
+        name: "Xtra"
+      - left: 15
+        right: 16
+        name: "Looper"
+
+
+  # ---------------------------------------------------------------------------
+  # stereo_pan
+  #   For each configured stereo pair, checks that the left channel is panned
+  #   fully left and the right channel is fully right (within pan_tolerance).
+  #   Pairs are inherited from stereo_balance above; no need to repeat them.
+  #   Per-pair overrides are possible with expected_left_pan / expected_right_pan.
+  # ---------------------------------------------------------------------------
+  stereo_pan:
+    enabled: true
+    pan_tolerance: 0.03          # how far from the expected position before warning
+    expected_left_pan: 0.0       # 0.0 = full left (L100)
+    expected_right_pan: 1.0      # 1.0 = full right (R100)
+    skip_muted_channels: true
+
+
+  # ---------------------------------------------------------------------------
+  # linked_balance
+  #   Same idea, but for pairs that are hardware-linked on the mixer itself.
+  #   On the XR18 linked pairs mirror each other, so a big difference would be
+  #   surprising — but the check is here in case of weirdness.
+  # ---------------------------------------------------------------------------
+  linked_balance:
+    enabled: true
+    tolerance_db: 1.0
+    skip_muted_channels: true
+
+
+  # ---------------------------------------------------------------------------
+  # aux_send_balance
+  #   For input stereo pairs routed to a non-main (aux) output bus that is
+  #   itself a stereo pair, checks that the send levels feeding the two halves
+  #   of the output pair are balanced (within tolerance_db).
+  #
+  #   Two wiring patterns are accepted:
+  #     * Stereo:    left input  -> left output  (nonzero)
+  #                  right input -> right output (nonzero); cross-sends off.
+  #                  The two direct sends must match within tolerance.
+  #     * Dual-mono: each input channel feeds BOTH output halves at the same
+  #                  level; all four sends must match within tolerance.
+  #
+  #   Input pairs are inherited from stereo_balance.pairs (override with a
+  #   local `pairs:` list). Output buses are listed in `output_pairs`.
+  #   Pan is not checked. Pairs not routed to an output bus are skipped.
+  # ---------------------------------------------------------------------------
+  aux_send_balance:
+    enabled: true
+    tolerance_db: 1.5          # max acceptable difference between output sides
+    floor_db: -60.0           # sends at/below this dB (or off) count as "not routed"
+    skip_muted_channels: false
+    output_pairs: []          # e.g. aux output stereo pairs:
+    # output_pairs:
+    #   - left: 1
+    #     right: 2
+    #     name: "Monitor"
+    # input_pairs override (defaults to stereo_balance.pairs):
+    # pairs:
+    #   - left: 11
+    #     right: 12
+    #     name: "FXReturn"
+
+
+  # ---------------------------------------------------------------------------
+  # bus_levels
+  #   Checks that specific channel->bus sends are at expected levels.
+  #
+  #   expect:
+  #     "zero"    - send should be at or below max_level_db (default -60)
+  #     "nonzero" - send should be above min_level_db (default -60)
+  #     "off"     - the bus send switch must be OFF
+  # ---------------------------------------------------------------------------
+  bus_levels:
+    enabled: true
+    rules: []
+    # Example rules (uncomment and adapt):
+    #
+    # - description: "Kick/snare not in reverb bus"
+    #   channels: [1, 2]
+    #   buses: [5]
+    #   expect: "zero"
+    #   max_level_db: -60
+    #   skip_muted_channels: false
+    #
+    # - description: "Lead vocal present in monitors"
+    #   channels: [5]
+    #   buses: [1, 2, 3, 4]
+    #   expect: "nonzero"
+    #   min_level_db: -20
+    #
+    # - description: "Bass not routed to FX bus"
+    #   channels: [3]
+    #   buses: [6]
+    #   expect: "off"
+
+
+  # ---------------------------------------------------------------------------
+  # fader_range
+  #   Flags channels or buses with faders outside a "normal" range.
+  #   Helps catch things like a fader accidentally pushed to +10 dB.
+  # ---------------------------------------------------------------------------
+  fader_range:
+    enabled: true
+    max_db: 6.0      # warn if fader is above this
+    min_db: -40.0    # info if fader is below this (but not -inf)
+    skip_muted_channels: true
+    skip_channels: []
+
+
+  # ---------------------------------------------------------------------------
+  # unnamed_channels
+  #   Flags channels with no name — easy to leave unnamed test inputs.
+  # ---------------------------------------------------------------------------
+  unnamed_channels:
+    enabled: true
+    only_active_channels: true  # only check channels with fader above -inf
+
+
+  # ---------------------------------------------------------------------------
+  # muted_fader_up
+  #   Flags channels that are MUTED but have their fader significantly up.
+  #   This isn't always wrong, but is often an accident or a forgotten mute.
+  # ---------------------------------------------------------------------------
+  muted_fader_up:
+    enabled: false
+    min_fader_db: -10.0    # only flag if fader is at or above this
+    skip_channels: []
