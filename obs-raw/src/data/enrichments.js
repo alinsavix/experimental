@@ -7,6 +7,21 @@ async function getInputNames(obs) {
   return (await obs.call('GetInputList')).inputs.map((i) => i.inputName).sort(byName)
 }
 
+async function getSourceNames(obs) {
+  const [inputList, sceneList, groupList] = await Promise.all([
+    obs.call('GetInputList'),
+    obs.call('GetSceneList'),
+    obs.call('GetGroupList'),
+  ])
+  return [
+    ...new Set([
+      ...inputList.inputs.map((i) => i.inputName),
+      ...sceneList.scenes.map((s) => s.sceneName),
+      ...groupList.groups,
+    ]),
+  ].sort(byName)
+}
+
 async function getSceneNames(obs) {
   // GetSceneList orders scenes by ascending sceneIndex, which is the reverse of
   // the OBS scene-list dock (index 0 is the bottom item). Sort by sceneIndex
@@ -38,7 +53,7 @@ async function getSupportedImageFormats(obs) {
 }
 
 async function getFilterKinds(obs) {
-  return (await obs.call('GetSourceFilterKindList')).sourceFilterKinds
+  return (await obs.call('GetSourceFilterKindList')).sourceFilterKinds.sort(byName)
 }
 
 async function getFilterNames(obs, ctx) {
@@ -157,20 +172,20 @@ export const enrichments = {
 
   GetSourceActive: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
     },
   },
 
   GetSourceScreenshot: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
       imageFormat: { getOptions: getSupportedImageFormats },
     },
   },
 
   SaveSourceScreenshot: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
       imageFormat: { getOptions: getSupportedImageFormats },
     },
   },
@@ -478,7 +493,7 @@ export const enrichments = {
 
   GetSourceFilterList: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
     },
   },
 
@@ -490,50 +505,49 @@ export const enrichments = {
 
   CreateSourceFilter: {
     params: {
-      sourceName: { getOptions: getInputNames },
-      filterName: { getOptions: getFilterNames },
+      sourceName: { getOptions: getSourceNames },
       filterKind: { getOptions: getFilterKinds },
     },
   },
 
   RemoveSourceFilter: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   SetSourceFilterName: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   GetSourceFilter: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   SetSourceFilterIndex: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   SetSourceFilterSettings: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
       filterName: { getOptions: getFilterNames },
     },
   },
 
   SetSourceFilterEnabled: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
       filterName: { getOptions: getFilterNames },
     },
   },
@@ -558,7 +572,7 @@ export const enrichments = {
   CreateSceneItem: {
     params: {
       sceneName: { getOptions: getSceneNames },
-      sourceName: { getOptions: getSceneItemSources },
+      sourceName: { getOptions: getSourceNames },
     },
   },
 
@@ -727,7 +741,7 @@ export const enrichments = {
 
   OpenSourceProjector: {
     params: {
-      sourceName: { getOptions: getInputNames },
+      sourceName: { getOptions: getSourceNames },
     },
   },
 }
