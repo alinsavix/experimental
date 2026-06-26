@@ -246,7 +246,17 @@
           <!-- Response -->
           <div class="my-3">
             <h2>Response</h2>
-            <CodePreview :value="response" />
+            <v-sheet
+              v-if="screenshotImageSrc"
+              class="rounded-lg my-3 pa-3 d-flex justify-center bg-grey-darken-4"
+            >
+              <img
+                :src="screenshotImageSrc"
+                alt="GetSourceScreenshot response"
+                style="display: block; max-width: 100%; max-height: 70vh; object-fit: contain"
+              >
+            </v-sheet>
+            <CodePreview :value="responsePreview" />
           </div>
         </div>
       </v-col>
@@ -303,6 +313,39 @@ const displayParams = computed(() =>
     return obsInfo.value.availableRequests?.includes(p.requiresRequest) ?? false
   }),
 )
+
+const imageMimeTypes = {
+  bmp: 'image/bmp',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+}
+
+const screenshotImageFormat = computed(() => {
+  const format = currentParams.value.find((p) => p.name === 'imageFormat')?.value
+  return String(format || 'png').toLowerCase()
+})
+
+const screenshotImageSrc = computed(() => {
+  if (selectedRequest.value?.name !== 'GetSourceScreenshot') return null
+  const imageData = response.value?.imageData
+  if (typeof imageData !== 'string' || !imageData.trim()) return null
+  const trimmed = imageData.trim()
+  if (trimmed.startsWith('data:image/')) return trimmed
+  const mimeType = imageMimeTypes[screenshotImageFormat.value] ?? `image/${screenshotImageFormat.value}`
+  return `data:${mimeType};base64,${trimmed}`
+})
+
+const responsePreview = computed(() => {
+  if (!screenshotImageSrc.value || typeof response.value?.imageData !== 'string') {
+    return response.value
+  }
+  return {
+    ...response.value,
+    imageData: `[base64 image data omitted: ${response.value.imageData.length.toLocaleString()} chars]`,
+  }
+})
 
 // Preview of the generated Streamer.bot OBS Raw request
 const preview = computed(() => {
