@@ -272,6 +272,7 @@ import RequestMenu from './RequestMenu.vue'
 import ObsParamInput from './ObsParamInput.vue'
 import CodePreview from './CodePreview.vue'
 import { requests, paramTypeItems, ParamType } from '../data/requests.js'
+import { buildRequestData } from '../domain/requestData.mjs'
 
 // OBS WebSocket instance (not reactive — passed by reference to child components)
 const obs = new OBSWebSocket()
@@ -367,34 +368,9 @@ function buildRequestPayload(format, requestType = '', data = {}) {
   }
 }
 
-// -------------------------------------------------------------------
-// Param value conversion
-// -------------------------------------------------------------------
-function convertValue(param) {
-  if (param.type === ParamType.NUMBER) return Number(param.value)
-  if (param.type === ParamType.BOOLEAN) return Boolean(param.value)
-  if (param.type === ParamType.OBJECT) {
-    if (param.params) {
-      const obj = {}
-      param.params.forEach((p) => (obj[p.name] = convertValue(p)))
-      return obj
-    }
-    try {
-      return JSON.parse(param.value)
-    } catch {
-      return {}
-    }
-  }
-  return param.value
-}
-
 function buildData() {
   if (!selectedRequest.value) return {}
-  const data = {}
-  displayParams.value.forEach((p) => {
-    data[p.name] = convertValue(p)
-  })
-  return data
+  return buildRequestData(displayParams.value)
 }
 
 // -------------------------------------------------------------------

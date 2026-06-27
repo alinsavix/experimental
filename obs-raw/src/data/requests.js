@@ -69,6 +69,7 @@ function buildParams(requestFields, paramEnrichments = {}) {
       type: mapType(f.valueType),
       description: f.valueDescription,
       required: !f.valueOptional,
+      allowsNull: /(?:use|specify) `null`/i.test(f.valueDescription),
       ...enrichment,
     }
 
