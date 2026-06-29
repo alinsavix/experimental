@@ -6,6 +6,18 @@
       <small class="text-grey">...but actually maintained</small>
     </span>
 
+    <v-btn-toggle v-model="currentPage" mandatory density="compact" color="primary">
+      <v-btn value="requests" @click="showRequests">
+        Requests
+        <v-icon end>mdi-code-json</v-icon>
+      </v-btn>
+      <v-btn value="events" @click="showEvents">
+        Events
+        <v-badge v-if="events.length" :content="events.length" inline color="primary" />
+        <v-icon end>mdi-format-list-bulleted</v-icon>
+      </v-btn>
+    </v-btn-toggle>
+
     <v-spacer />
 
     <v-toolbar-items>
@@ -71,7 +83,7 @@
 
   <!-- Main content -->
   <v-container fluid>
-    <v-row>
+    <v-row v-if="currentPage === 'requests'">
       <!-- Left: request list -->
       <v-col cols="12" sm="4" xl="3">
         <RequestMenu v-model="selectedRequest" :obs-info="obsInfo" />
@@ -261,17 +273,43 @@
         </div>
       </v-col>
     </v-row>
+
+    <v-row v-else>
+      <v-col cols="12">
+        <v-slide-y-transition>
+          <v-alert
+            v-if="error"
+            type="error"
+            density="compact"
+            variant="tonal"
+            class="mb-4"
+          >
+            <v-alert-title>{{ error }}</v-alert-title>
+            <small>OBS Studio must be running with WebSocket enabled</small>
+          </v-alert>
+        </v-slide-y-transition>
+
+        <EventLog
+          :events="events"
+          :is-connected="isConnected"
+          :max-events="MAX_EVENTS"
+          @clear="clearEvents"
+        />
+      </v-col>
+    </v-row>
   </v-container>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useLocalStorage, useClipboard } from '@vueuse/core'
-import OBSWebSocket from 'obs-websocket-js'
+import OBSWebSocket, { EventSubscription } from 'obs-websocket-js'
 import RequestMenu from './RequestMenu.vue'
 import ObsParamInput from './ObsParamInput.vue'
 import CodePreview from './CodePreview.vue'
+import EventLog from './EventLog.vue'
 import { requests, paramTypeItems, ParamType } from '../data/requests.js'
+import { eventTypes } from '../data/eventTypes.js'
 import { buildRequestData } from '../domain/requestData.mjs'
 
 // OBS WebSocket instance (not reactive — passed by reference to child components)
@@ -287,6 +325,13 @@ const isConnecting = ref(false)
 const isConnected = ref(false)
 const error = ref(null)
 const obsInfo = ref(null)
+
+// Page state + bounded in-memory event log
+const currentPage = ref('requests')
+const events = ref([])
+const MAX_EVENTS = 500
+let nextEventId = 1
+const eventListeners = new Map()
 
 // Selected request + per-request param state
 const selectedRequest = ref(requests[0])
@@ -413,12 +458,71 @@ watch(isConnected, async (connected) => {
   }
 })
 
+// OBS only sends event traffic while the event log is visible.
+watch(currentPage, async (page) => {
+  if (!isConnected.value) return
+  try {
+    await obs.reidentify({ eventSubscriptions: eventSubscriptionForPage(page) })
+  } catch (e) {
+    error.value = e.message || 'Unable to update OBS event subscriptions'
+  }
+})
+
 // -------------------------------------------------------------------
 // Connection
 // -------------------------------------------------------------------
 function setupListeners() {
   obs.on('ConnectionClosed', () => (isConnected.value = false))
   obs.on('ConnectionError', () => (isConnected.value = false))
+
+  for (const eventType of eventTypes) {
+    const listener = (data) => {
+      // Also guard locally in case an event was already in flight when the
+      // subscription was disabled.
+      if (currentPage.value !== 'events') return
+
+      events.value.unshift({
+        id: nextEventId++,
+        type: eventType,
+        receivedAt: new Date().toISOString(),
+        data,
+      })
+
+      if (events.value.length > MAX_EVENTS) {
+        events.value.length = MAX_EVENTS
+      }
+    }
+    eventListeners.set(eventType, listener)
+    obs.on(eventType, listener)
+  }
+}
+
+function eventSubscriptionForPage(page) {
+  return page === 'events' ? EventSubscription.All : EventSubscription.None
+}
+
+function clearEvents() {
+  events.value = []
+}
+
+function showEvents() {
+  window.location.hash = 'events'
+}
+
+function showRequests() {
+  window.location.hash = selectedRequest.value?.name ?? ''
+}
+
+function handleHashChange() {
+  const hash = decodeURIComponent(window.location.hash.slice(1))
+  if (hash === 'events') {
+    currentPage.value = 'events'
+    return
+  }
+
+  currentPage.value = 'requests'
+  const found = requests.find((request) => request.name === hash)
+  if (found) selectedRequest.value = found
 }
 
 async function connect() {
@@ -426,7 +530,9 @@ async function connect() {
   isConnecting.value = true
   try {
     if (isConnected.value) await obs.disconnect()
-    await obs.connect(wsUrl.value, password.value)
+    await obs.connect(wsUrl.value, password.value, {
+      eventSubscriptions: eventSubscriptionForPage(currentPage.value),
+    })
     isConnected.value = true
   } catch (e) {
     error.value = e.message || 'Connection error'
@@ -498,17 +604,17 @@ function copyCph() {
 onMounted(() => {
   setupListeners()
 
-  // Navigate to request from URL hash
-  if (window.location.hash) {
-    const name = window.location.hash.slice(1)
-    const found = requests.find((r) => r.name === name)
-    if (found) selectedRequest.value = found
-  }
+  handleHashChange()
+  window.addEventListener('hashchange', handleHashChange)
 
   connect()
 })
 
 onUnmounted(() => {
+  window.removeEventListener('hashchange', handleHashChange)
+  for (const [eventType, listener] of eventListeners) {
+    obs.off(eventType, listener)
+  }
   obs.disconnect()
 })
 </script>
