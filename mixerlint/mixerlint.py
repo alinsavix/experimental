@@ -230,6 +230,23 @@ class BusState:
     on: int = 1
 
 
+class MixerUnreachable(Exception):
+    """
+    Raised when the mixer returns no OSC responses at all — almost always means
+    it is powered off, unplugged, or the host/port is wrong. Without this guard
+    the linter would run against all-default state and emit a flood of
+    meaningless warnings (e.g. every stereo pair reported as mis-panned).
+    """
+    def __init__(self, host: str, port: int, num_queries: int):
+        self.host = host
+        self.port = port
+        self.num_queries = num_queries
+        super().__init__(
+            f"no response from {host}:{port} "
+            f"({num_queries} queries sent, 0 replies)"
+        )
+
+
 def fetch_mixer_state(q: MixerQuery) -> tuple[list[ChannelState], list[BusState], dict]:
     """Read all relevant state from the mixer in as few round-trips as practical."""
 
@@ -271,6 +288,11 @@ def fetch_mixer_state(q: MixerQuery) -> tuple[list[ChannelState], list[BusState]
 
     console.print(f"[dim]Querying {len(addrs)} OSC addresses...[/dim]")
     results = q.get_many(addrs)
+
+    # If the mixer sent nothing back at all, it's offline/unreachable. Bail out
+    # rather than lint the all-default snapshot (which produces spurious warnings).
+    if not any(v is not None for v in results.values()):
+        raise MixerUnreachable(q.host, q.port, len(addrs))
 
     # --- Decode channel link state ---
     # The XR18 returns /config/chlink as a LIST of per-pair flags, one per
@@ -1167,6 +1189,13 @@ def main():
 
     try:
         channels, buses, meta = fetch_mixer_state(q)
+    except MixerUnreachable as e:
+        console.print(f"[bold red]Mixer not responding[/bold red] - {e}")
+        console.print(
+            "[dim]Check that the mixer is powered on and reachable, and that "
+            "the host/port are correct.[/dim]"
+        )
+        sys.exit(2)
     finally:
         q.close()
 
