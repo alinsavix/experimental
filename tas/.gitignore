@@ -1,0 +1,13 @@
+# Secrets — never commit
+.env
+
+# Python venv
+.venv/
+
+# Generated artifacts
+output/
+*.pyc
+__pycache__/
+
+# Demo audio is large; keep it out of git
+demodata/

@@ -1,0 +1,6 @@
+openai>=1.40.0
+python-dotenv>=1.0.0
+numpy>=1.26
+soundfile>=0.12
+silero-vad>=5.1          # pulls in torch (CPU build is fine)
+onnxruntime>=1.17        # faster CPU backend for Silero VAD
