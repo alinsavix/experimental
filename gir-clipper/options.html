@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 20px;
+      max-width: 480px;
+    }
+    h1 { font-size: 18px; color: #7eb8f7; margin: 0 0 16px 0; }
+    label { display: block; margin-bottom: 6px; color: #aaa; font-size: 13px; }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 8px 10px;
+      background: #2a2a3e;
+      border: 1px solid #445;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 13px;
+      font-family: monospace;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+    }
+    input:focus { outline: none; border-color: #7eb8f7; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+    button {
+      padding: 8px 18px;
+      background: #7eb8f7;
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #a0ccff; }
+    #status { font-size: 13px; color: #7fc97f; min-height: 18px; }
+    #status.error { color: #f07070; }
+    .hint { font-size: 11px; color: #666; margin-top: -8px; margin-bottom: 12px; }
+    hr { border: none; border-top: 1px solid #333; margin: 16px 0; }
+  </style>
+</head>
+<body>
+  <h1>🤖 GIR Clipper — Settings</h1>
+
+  <label>Webhook URL</label>
+  <input type="text" id="webhook-url" placeholder="https://vootcruiser.lupine.org/clip">
+  <p class="hint">The HTTPS endpoint on your Hermes instance.</p>
+
+  <label>HMAC Secret</label>
+  <input type="password" id="hmac-secret" placeholder="Paste your webhook secret here">
+  <p class="hint">Found in <code>~/.hermes/webhook_subscriptions.json</code> → clipper → secret.</p>
+
+  <div class="row">
+    <button id="save-btn">Save</button>
+    <span id="status"></span>
+  </div>
+
+  <hr>
+  <p class="hint">Settings are stored locally in Firefox and never sent anywhere except the webhook URL above.</p>
+
+  <script src="options.js"></script>
+</body>
+</html>
