@@ -147,7 +147,7 @@
     const diagnosticsEl = document.getElementById('diagnostics');
     const rendererState = BBRender.createState();
     rendererState.duration = Math.max(1, parseInt(params.get('duration'), 10) || 4000);
-    rendererState.queueMode = params.has('queue') || params.get('mode') === 'queue' ? 'queue' : 'replace';
+    rendererState.queueMode = params.get('mode') === 'queue' ? 'queue' : 'replace';
     rendererState.globalTags = params.get('globalTags') || '';
     rendererState.layout = readLayoutParams();
     const showPageDiagnostics = params.has('diagnostics') || params.has('debug');
@@ -189,26 +189,26 @@
       };
     }
 
-    function readPayloadLayout(payload) {
-      if (!payload || typeof payload !== 'object') return {};
+    function readPayloadLayout(data) {
+      if (!data || typeof data !== 'object') return {};
       const layout = {};
       [
         'width', 'sourceWidth', 'height', 'sourceHeight', 'padding', 'autoPadding',
         'lineHeight', 'lineSpacing', 'fontSize', 'baseFontSize', 'anchor', 'x', 'y'
       ].forEach((key) => {
-        if (payload[key] !== undefined) layout[key] = payload[key];
+        if (data[key] !== undefined) layout[key] = data[key];
       });
       return layout;
     }
 
-    function readPayloadTransition(payload) {
-      if (!payload || typeof payload !== 'object') return null;
+    function readPayloadTransition(data) {
+      if (!data || typeof data !== 'object') return null;
 
-      const source = payload.transition && typeof payload.transition === 'object'
-        ? payload.transition
-        : payload.animation && typeof payload.animation === 'object'
-          ? payload.animation
-          : payload;
+      const source = data.transition && typeof data.transition === 'object'
+        ? data.transition
+        : data.animation && typeof data.animation === 'object'
+          ? data.animation
+          : data;
 
       const transition = {
         in: source.in || source.enter || source.entrance || source.transitionIn || source.animationIn,
@@ -365,6 +365,7 @@
         return false;
       }
 
+      const data = BBRender.getPayloadData(payload);
       const command = BBRender.getCommand(payload);
 
       if (command === 'clear') {
@@ -373,42 +374,42 @@
       }
 
       if (command === 'set_global_tags') {
-        rendererState.globalTags = String(payload.tags || payload.globalTags || '');
+        rendererState.globalTags = String(data.tags || data.globalTags || '');
         return true;
       }
 
       if (command === 'set_duration') {
-        rendererState.duration = Math.max(1, parseInt(payload.duration || payload.ms, 10) || rendererState.duration);
+        rendererState.duration = Math.max(1, parseInt(data.duration || data.ms, 10) || rendererState.duration);
         return true;
       }
 
       if (command === 'set_layout') {
         rendererState.layout = {
-          width: payload.width !== undefined ? payload.width : payload.sourceWidth !== undefined ? payload.sourceWidth : rendererState.layout.width || '',
-          height: payload.height !== undefined ? payload.height : payload.sourceHeight !== undefined ? payload.sourceHeight : rendererState.layout.height || '',
-          padding: payload.padding !== undefined ? payload.padding : rendererState.layout.padding || '',
-          autoPadding: payload.autoPadding !== undefined ? payload.autoPadding : rendererState.layout.autoPadding || '',
-          lineHeight: payload.lineHeight || payload.lineSpacing || rendererState.layout.lineHeight || '',
-          fontSize: payload.fontSize !== undefined ? payload.fontSize : payload.baseFontSize !== undefined ? payload.baseFontSize : rendererState.layout.fontSize || '',
-          anchor: payload.anchor || rendererState.layout.anchor || 'center',
-          x: payload.x !== undefined ? payload.x : rendererState.layout.x || '',
-          y: payload.y !== undefined ? payload.y : rendererState.layout.y || ''
+          width: data.width !== undefined ? data.width : data.sourceWidth !== undefined ? data.sourceWidth : rendererState.layout.width || '',
+          height: data.height !== undefined ? data.height : data.sourceHeight !== undefined ? data.sourceHeight : rendererState.layout.height || '',
+          padding: data.padding !== undefined ? data.padding : rendererState.layout.padding || '',
+          autoPadding: data.autoPadding !== undefined ? data.autoPadding : rendererState.layout.autoPadding || '',
+          lineHeight: data.lineHeight || data.lineSpacing || rendererState.layout.lineHeight || '',
+          fontSize: data.fontSize !== undefined ? data.fontSize : data.baseFontSize !== undefined ? data.baseFontSize : rendererState.layout.fontSize || '',
+          anchor: data.anchor || rendererState.layout.anchor || 'center',
+          x: data.x !== undefined ? data.x : rendererState.layout.x || '',
+          y: data.y !== undefined ? data.y : rendererState.layout.y || ''
         };
         applyMessageLayout(rendererState.layout);
         return true;
       }
 
       if (command === 'set_preset') {
-        if (payload.name) rendererState.presets[payload.name] = String(payload.value || payload.tags || '');
+        if (data.name) rendererState.presets[data.name] = String(data.value || data.tags || '');
         return true;
       }
 
       const bbcode = BBRender.extractBBCode(payload);
       if (bbcode) {
         showBBCode(bbcode, {
-          duration: payload && typeof payload === 'object' ? payload.duration || payload.ms : undefined,
-          layout: readPayloadLayout(payload),
-          transition: readPayloadTransition(payload),
+          duration: data.duration || data.ms,
+          layout: readPayloadLayout(data),
+          transition: readPayloadTransition(data),
           immediate: rendererState.queueMode !== 'queue'
         });
         return true;

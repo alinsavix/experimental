@@ -1,11 +1,12 @@
 PORT ?= 4173
 NODE ?= node
+INSTALL_DIR ?= C:/OBS/html
 
 # Stamp marking that Playwright's Chromium has been installed, so setup only
 # pays the install cost once instead of on every test run.
 PW_STAMP := node_modules/.playwright-chromium-installed
 
-.PHONY: help build test browser-test visual-test visual-update check clean dist serve run run-packed run-separate run-cdn run-tests setup install-browsers vendor-check vendor-update
+.PHONY: help build test browser-test visual-test visual-update check clean dist serve run run-packed run-separate run-cdn run-tests setup install install-browsers vendor-check vendor-update
 
 help:
 	@echo "bbrender targets:"
@@ -16,6 +17,7 @@ help:
 	@echo "  make visual-update  Update Playwright visual screenshot baselines"
 	@echo "  make check          Run tests and build all artifacts"
 	@echo "  make clean          Remove dist output"
+	@echo "  make install        Build and copy packed sb_bbrender.html to $(INSTALL_DIR)"
 	@echo "  make serve          Serve the source project at http://127.0.0.1:$(PORT)/"
 	@echo "  make run            Alias for make serve"
 	@echo "  make run-tests      Serve source project, then open /tests/visual-harness.html manually"
@@ -47,8 +49,13 @@ check:
 
 dist: build
 
+install: build
+	mkdir -p "$(INSTALL_DIR)"
+	cp dist/packed/sb_bbrender.html "$(INSTALL_DIR)/sb_bbrender.html"
+	@echo "Installed dist/packed/sb_bbrender.html to $(INSTALL_DIR)/sb_bbrender.html"
+
 clean:
-	$(NODE) -e "require('fs').rmSync('dist', { recursive: true, force: true })"
+	rm -rf dist
 
 serve:
 	$(NODE) scripts/serve.mjs . $(PORT)

@@ -45,7 +45,6 @@ The browser-source URL accepts these query parameters:
 | `endpoint` | `/` | WebSocket endpoint path. |
 | `password` | empty | Base64-encoded Streamer.bot WebSocket password. |
 | `duration` | `4000` | Default message display duration in milliseconds. |
-| `queue` | off | Enable queue mode when present. |
 | `mode` | `replace` | Set to `queue` to queue messages instead of replacing. |
 | `globalTags` | empty | BBCode opening tags wrapped around every message. |
 | `diagnostics` | off | Show parse diagnostics on the page. |
@@ -87,36 +86,36 @@ http://127.0.0.1:4173/sb_bbrender.html?duration=6000&sourceWidth=900&sourceHeigh
 
 ## Request Envelope
 
-Incoming WebSocket payloads must be `General.Custom` payload objects with:
-
-```js
-{
-  type: "bbcode.render"
-}
-```
-
-The renderer ignores payloads whose `type` is not `bbcode.render`.
-
-### Text Fields
-
-Message text can be supplied in any of these fields:
+Incoming WebSocket payloads must be `General.Custom` payload objects with
+exactly two top-level keys: `type` and `data`. All parameters and settings
+nest under `data`:
 
 ```js
 {
   type: "bbcode.render",
-  bbcode: "[b]Hello[/b]"
+  data: { ... }
+}
+```
+
+The renderer ignores payloads whose `type` is not `bbcode.render`. Fields
+placed at the top level instead of inside `data` are ignored.
+
+### Text Fields
+
+Message text can be supplied in any of these `data` fields:
+
+```js
+{
+  type: "bbcode.render",
+  data: {
+    bbcode: "[b]Hello[/b]"
+  }
 }
 ```
 
 Accepted text aliases:
 
 ```text
-bbcode
-text
-message
-content
-value
-displayText
 data.bbcode
 data.text
 data.message
@@ -129,26 +128,28 @@ The first non-empty string in that order is rendered.
 
 ### Per-Message Options
 
-Per-message duration, layout, and root transitions can be sent on the same
-payload as the text:
+Per-message duration, layout, and root transitions can be sent in the same
+`data` object as the text:
 
 ```js
 {
   type: "bbcode.render",
-  bbcode: "[b][color=gold]Alert[/color][/b]",
-  duration: 5000,
-  fontSize: 72,
-  sourceWidth: 900,
-  sourceHeight: 260,
-  anchor: "top-left",
-  x: 120,
-  y: 80,
-  transition: {
-    in: "zoom",
-    out: "fade",
-    inTime: 400,
-    outTime: 600,
-    scale: 0.08
+  data: {
+    bbcode: "[b][color=gold]Alert[/color][/b]",
+    duration: 5000,
+    fontSize: 72,
+    sourceWidth: 900,
+    sourceHeight: 260,
+    anchor: "top-left",
+    x: 120,
+    y: 80,
+    transition: {
+      in: "zoom",
+      out: "fade",
+      inTime: 400,
+      outTime: 600,
+      scale: 0.08
+    }
   }
 }
 ```
@@ -160,7 +161,7 @@ Duration fields:
 | `duration` | Display duration in milliseconds. |
 | `ms` | Alias for `duration`. |
 
-Layout fields are top-level payload fields:
+Layout fields sit directly inside `data`:
 
 | Field | Alias | Description |
 | --- | --- | --- |
@@ -179,8 +180,8 @@ Nested `layout: { ... }` is not currently read from WebSocket payloads.
 ### Root Transitions
 
 Root transitions animate the whole message in and/or out over its display
-duration. Transition settings can be sent inside `transition`, inside
-`animation`, or as top-level aliases.
+duration. Transition settings can be sent inside `data.transition`, inside
+`data.animation`, or as aliases directly inside `data`.
 
 Supported transition presets:
 
@@ -209,28 +210,30 @@ Transition fields:
 | `inScale` | `enterScale` | Entrance zoom scale. |
 | `outScale` | `exitScale` | Exit zoom scale. |
 
-Example with top-level aliases:
+Example with aliases directly inside `data`:
 
 ```js
 {
   type: "bbcode.render",
-  bbcode: "Sliding message",
-  duration: 5000,
-  transitionIn: "slide-left",
-  transitionOut: "fade",
-  enterTime: 300,
-  exitTime: 500
+  data: {
+    bbcode: "Sliding message",
+    duration: 5000,
+    transitionIn: "slide-left",
+    transitionOut: "fade",
+    enterTime: 300,
+    exitTime: 500
+  }
 }
 ```
 
 ## Commands
 
-Commands are selected from the first available command field:
+Commands are selected from the first available `data` field:
 
 ```text
-command
-action
-requestType
+data.command
+data.action
+data.requestType
 ```
 
 Supported commands:
@@ -248,24 +251,28 @@ Examples:
 ```js
 bbrender.receivePayload({
   type: "bbcode.render",
-  command: "set_global_tags",
-  tags: "[b][color=gold]"
+  data: {
+    command: "set_global_tags",
+    tags: "[b][color=gold]"
+  }
 });
 
 bbrender.receivePayload({
   type: "bbcode.render",
-  command: "set_layout",
-  width: 900,
-  height: 240,
-  fontSize: 72,
-  anchor: "bottom-right",
-  x: 40,
-  y: 40
+  data: {
+    command: "set_layout",
+    width: 900,
+    height: 240,
+    fontSize: 72,
+    anchor: "bottom-right",
+    x: 40,
+    y: 40
+  }
 });
 
 bbrender.receivePayload({
   type: "bbcode.render",
-  command: "clear"
+  data: { command: "clear" }
 });
 ```
 
@@ -276,7 +283,9 @@ bbrender.receivePayload({
 ```js
 window.bbrender.receivePayload({
   type: "bbcode.render",
-  bbcode: "[fire][shake rate=10 level=2]Test[/shake][/fire]"
+  data: {
+    bbcode: "[fire][shake rate=10 level=2]Test[/shake][/fire]"
+  }
 });
 ```
 
@@ -355,7 +364,7 @@ span. Use this when external overlay CSS should style a BBCode range.
 
 ## Current Limitations
 
-- Queue mode is configured by URL only: `?queue=1` or `?mode=queue`.
+- Queue mode is configured by URL only: `?mode=queue`.
 - `globalTags` is a source-level setting. It is set by URL or the
   `set_global_tags` command, not as a per-message option.
 - WebSocket payload layout options must be top-level fields. Nested

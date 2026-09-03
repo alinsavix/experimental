@@ -24,12 +24,19 @@ export function runTests() {
       assert.equal(BBRender.wrapWithGlobalTags('x', '[b][color=red]'), '[b][color=red]x[/color][/b]');
     }],
     ['payload type matching is case-insensitive', () => {
-      assert.equal(BBRender.shouldHandlePayload({ type: 'BBCode.Render', bbcode: 'x' }), true);
-      assert.equal(BBRender.shouldHandlePayload({ type: 'other-client', bbcode: 'x' }), false);
-      assert.equal(BBRender.shouldHandlePayload({ bbcode: 'x' }), false);
+      assert.equal(BBRender.shouldHandlePayload({ type: 'BBCode.Render', data: { bbcode: 'x' } }), true);
+      assert.equal(BBRender.shouldHandlePayload({ type: 'other-client', data: { bbcode: 'x' } }), false);
+      assert.equal(BBRender.shouldHandlePayload({ data: { bbcode: 'x' } }), false);
     }],
-    ['payload extracts supported text fields', () => {
-      assert.equal(BBRender.extractBBCode({ type: 'bbcode.render', message: '[b]hello[/b]' }), '[b]hello[/b]');
+    ['payload extracts supported text fields from data', () => {
+      assert.equal(BBRender.extractBBCode({ type: 'bbcode.render', data: { message: '[b]hello[/b]' } }), '[b]hello[/b]');
+    }],
+    ['top-level text fields are not extracted', () => {
+      assert.equal(BBRender.extractBBCode({ type: 'bbcode.render', bbcode: '[b]hello[/b]' }), '');
+    }],
+    ['payload command reads from data', () => {
+      assert.equal(BBRender.getCommand({ type: 'bbcode.render', data: { command: 'clear' } }), 'clear');
+      assert.equal(BBRender.getCommand({ type: 'bbcode.render', command: 'clear' }), '');
     }],
     ['basic named colors normalize', () => {
       assert.equal(BBRender.normalizeColor('red'), 'red');

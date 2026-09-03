@@ -1,22 +1,21 @@
 import { normalizeTagName } from './utils.js';
 
+export function getPayloadData(payload) {
+  if (!payload || typeof payload !== 'object') return {};
+  const data = payload.data;
+  return data && typeof data === 'object' ? data : {};
+}
+
 export function extractBBCode(payload) {
-  if (typeof payload === 'string') return payload;
-  if (!payload || typeof payload !== 'object') return '';
+  const data = getPayloadData(payload);
 
   const candidates = [
-    payload.bbcode,
-    payload.text,
-    payload.message,
-    payload.content,
-    payload.value,
-    payload.displayText,
-    payload.data && payload.data.bbcode,
-    payload.data && payload.data.text,
-    payload.data && payload.data.message,
-    payload.data && payload.data.content,
-    payload.data && payload.data.value,
-    payload.data && payload.data.displayText
+    data.bbcode,
+    data.text,
+    data.message,
+    data.content,
+    data.value,
+    data.displayText
   ];
 
   const match = candidates.find((value) => typeof value === 'string' && value.trim());
@@ -24,8 +23,8 @@ export function extractBBCode(payload) {
 }
 
 export function getCommand(payload) {
-  if (!payload || typeof payload !== 'object') return '';
-  return normalizeTagName(payload.command || payload.action || payload.requestType);
+  const data = getPayloadData(payload);
+  return normalizeTagName(data.command || data.action || data.requestType);
 }
 
 export function shouldHandlePayload(payload) {

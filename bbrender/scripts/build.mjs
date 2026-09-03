@@ -35,6 +35,7 @@ const publicApi = [
   'applySourceLayout',
   'extractBBCode',
   'getCommand',
+  'getPayloadData',
   'shouldHandlePayload',
   'normalizeColor',
   'applyAnimationStyles',

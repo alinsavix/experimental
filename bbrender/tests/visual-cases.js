@@ -281,7 +281,7 @@
       id: 'payload-command',
       category: 'WebSocket',
       name: 'Mock Payload',
-      payload: { type: 'bbcode.render', bbcode: '[b]Payload text[/b]' },
+      payload: { type: 'bbcode.render', data: { bbcode: '[b]Payload text[/b]' } },
       expected: 'The mock websocket path should render the bbcode field without a real websocket message.'
     }
   ];

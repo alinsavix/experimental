@@ -211,10 +211,11 @@ export function runRendererTests(BBRender, doc = document) {
     });
     assert('unknown tags report diagnostics', unknownDiagnostics.length >= 1);
 
-    assert('bbcode.render payload is handled', BBRender.shouldHandlePayload({ type: 'bbcode.render', bbcode: 'x' }));
-    assert('custom type comparison is case-insensitive', BBRender.shouldHandlePayload({ type: 'BBCode.Render', bbcode: 'x' }));
-    assert('unrelated custom payload is ignored', !BBRender.shouldHandlePayload({ type: 'other-client', bbcode: 'x' }));
-    assert('untyped payload is ignored', !BBRender.shouldHandlePayload({ bbcode: 'x' }));
+    assert('bbcode.render payload is handled', BBRender.shouldHandlePayload({ type: 'bbcode.render', data: { bbcode: 'x' } }));
+    assert('custom type comparison is case-insensitive', BBRender.shouldHandlePayload({ type: 'BBCode.Render', data: { bbcode: 'x' } }));
+    assert('unrelated custom payload is ignored', !BBRender.shouldHandlePayload({ type: 'other-client', data: { bbcode: 'x' } }));
+    assert('untyped payload is ignored', !BBRender.shouldHandlePayload({ data: { bbcode: 'x' } }));
+    assert('text fields resolve from data only', BBRender.extractBBCode({ type: 'bbcode.render', data: { bbcode: 'x' } }) === 'x' && BBRender.extractBBCode({ type: 'bbcode.render', bbcode: 'x' }) === '');
   });
 
   const failures = results.filter((result) => !result.passed);
