@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -14,10 +15,15 @@ from pathlib import Path
 class BackblazeClient:
     debug_mode = False  # Class variable for debug mode
 
+    # Backblaze writes this literal line at the end of bzlist_filesremaining.txt when it
+    # caps the report. It is not a file — it just means "there are more than these".
+    MORE_FILES_MARKER = '...MORE_FILES...'
+
     def __init__(self):
         """Initialize Backblaze client interface"""
         self.bz_executable = self.find_bz_executable()
         self.bz_data_path = self.find_bz_data_path()
+        self.list_truncated = False  # True when Backblaze truncated the pending list
 
     def find_bz_executable(self):
         """Find Backblaze CLI executable"""
@@ -145,6 +151,94 @@ class BackblazeClient:
             print(f"[DEBUG] Returning status_info: {status_info}")
         return status_info
 
+    def parse_pauseinfo(self):
+        """Parse pauseinfo.xml to detect an explicit pause.
+
+        Pause is *not* reflected in overviewstatus.xml — a paused client reports
+        cur_state="not_running", exactly like one that is merely idle between cycles.
+        The pause is recorded here instead, as an expiry timestamp (the client's
+        "pause for 2 hours"). Despite the _gmt_ in the name the value is plain epoch
+        milliseconds, so it compares directly against time.time() * 1000.
+        """
+        info = {}
+
+        try:
+            if not self.bz_data_path:
+                return info
+
+            path = os.path.join(self.bz_data_path, 'bzdata', 'pauseinfo.xml')
+            if not os.path.exists(path):
+                if self.debug_mode:
+                    print(f"[DEBUG] pauseinfo.xml not found at {path}")
+                return info
+
+            node = ET.parse(path).getroot().find('pauseinfo')
+            if node is None:
+                return info
+
+            try:
+                until_millis = int(node.get('pauseuntil_gmt_millis', '0'))
+            except ValueError:
+                until_millis = 0
+
+            # Treat 0 / already-elapsed timestamps as "not paused"
+            info['paused'] = until_millis > time.time() * 1000
+            info['pause_until_millis'] = until_millis
+            info['pause_reason'] = node.get('pauseuntil_reason', '')
+
+            if self.debug_mode:
+                print(f"[DEBUG] paused: {info['paused']} until {node.get('pauseuntil_localtime_datestr', '')}")
+
+        except Exception as e:
+            if self.debug_mode:
+                print(f"[DEBUG] Error parsing pauseinfo.xml: {e}")
+
+        return info
+
+    def parse_host_testimony(self):
+        """Parse bzhost_testimony_x.xml for Backblaze's authoritative backlog totals.
+
+        This is the file behind the numbers in Backblaze's own UI: bzserv computes the
+        backlog during its scan pass (filelist vs. upload history) and rolls it up here,
+        per volume and overall. It carries the counts only — not the paths.
+        """
+        info = {}
+
+        try:
+            if not self.bz_data_path:
+                return info
+
+            path = os.path.join(self.bz_data_path, 'bzdata', 'bzreports', 'bzhost_testimony_x.xml')
+            if not os.path.exists(path):
+                if self.debug_mode:
+                    print(f"[DEBUG] bzhost_testimony_x.xml not found at {path}")
+                return info
+
+            host = ET.parse(path).getroot().find('host_testimony')
+            if host is None:
+                return info
+
+            def as_int(attr):
+                try:
+                    return int(host.get(attr, ''))
+                except ValueError:
+                    return None
+
+            info['remaining_files'] = as_int('tot_remaining_files_numfiles')
+            info['remaining_bytes'] = as_int('tot_remaining_files_numbytes')
+            info['selected_files'] = as_int('tot_sel_for_backup_numfiles')
+            info['selected_bytes'] = as_int('tot_sel_for_backup_numbytes')
+            info['as_of'] = os.path.getmtime(path)
+
+            if self.debug_mode:
+                print(f"[DEBUG] testimony: {info['remaining_files']} files remaining")
+
+        except Exception as e:
+            if self.debug_mode:
+                print(f"[DEBUG] Error parsing bzhost_testimony_x.xml: {e}")
+
+        return info
+
     def get_status(self):
         """Get current backup status"""
         status_info = {
@@ -158,9 +252,20 @@ class BackblazeClient:
             overview_status = self.parse_overviewstatus()
             if overview_status:
                 status_info.update(overview_status)
-                # If we found status from overviewstatus.xml, return it
-                if 'status' in overview_status:
-                    return status_info
+
+            # Priority 2: A pause outranks the transmit state, which cannot express it
+            pause_info = self.parse_pauseinfo()
+            status_info.update(pause_info)
+            if pause_info.get('paused'):
+                # Don't claim we're stopped if a file is still on its way out
+                if overview_status.get('cur_state') == 'transmitting':
+                    status_info['status'] = 'Paused (finishing current file)'
+                else:
+                    status_info['status'] = 'Paused'
+                return status_info
+
+            if 'status' in overview_status:
+                return status_info
 
             # Try to read status from bzdata.xml or bzreports.xml
             if self.bz_data_path:
@@ -254,6 +359,7 @@ class BackblazeClient:
     def get_pending_files(self):
         """Get list of files pending backup"""
         pending_files = []
+        self.list_truncated = False
 
         try:
             if self.bz_data_path:
@@ -463,6 +569,12 @@ class BackblazeClient:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 for line in f:
                     line = line.strip()
+                    if line == self.MORE_FILES_MARKER:
+                        # Not a real entry — Backblaze capped the report here
+                        self.list_truncated = True
+                        if self.debug_mode:
+                            print(f"[DEBUG] {os.path.basename(file_path)} is truncated by Backblaze")
+                        continue
                     # Filter out Backblaze's own directories
                     if line and 'ProgramData\\Backblaze' not in line and 'Program Files' not in line:
                         files.append({

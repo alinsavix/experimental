@@ -77,6 +77,40 @@ A scrollable table showing:
 - File sizes in human-readable format (KB, MB, GB)
 - Status of each file
 
+A **Search** box above the table filters the list as you type. Space-separated
+terms are ANDed, so `mozilla metadata` matches paths containing both. `Ctrl+F`
+jumps to the box, `Esc` or **Clear** empties it. Filtering only affects which rows
+are displayed — the "Total Pending" count and size always cover the whole list.
+
+**Note on truncation**: Backblaze caps `bzlist_filesremaining.txt` at ~10 KB and marks
+the cut with a literal `...MORE_FILES...` line. That marker is not a real file; it is
+dropped from the list. The table therefore shows only a sample of the backlog (~70-95
+files), which is why the count reads e.g. `2,399 files (406.24 GB) — listing 94`.
+
+### Where the backlog numbers come from
+
+Backblaze computes the backlog during its scan pass and persists it in two different
+forms:
+
+| What | Where | Contents |
+|---|---|---|
+| Totals | `bzreports\bzhost_testimony_x.xml` | `tot_remaining_files_numfiles`, `tot_remaining_files_numbytes`, plus per-volume rollups |
+| Sample of the list | `bzreports\bzlist_filesremaining.txt` | First ~10 KB of paths, then `...MORE_FILES...` |
+
+The totals are what Backblaze's own UI displays, and this app reads the same file, so
+"Total Pending" matches the official client exactly. The **full list of remaining paths
+is never persisted** — it exists only in `bzserv`'s memory during the pass.
+
+It is reconstructible in principle, by diffing the scan index against the upload history:
+
+- `bzfilelists\*_filelist.dat` — every selected file with mtime and size (~960 MB, ~3.9 M files)
+- `bzbackup\bzdatacenter\bz_done_*.dat` — one record per upload, with mtime and path (**~12 GB across 814 files**, back to 2018)
+- `bzbackup\bzfileids.dat` — fileid to path map (~1.7 GB)
+
+A file is "remaining" when its current mtime does not match the newest `bz_done` record
+for that path. Doing that diff means reading ~13 GB, so it is not viable on a refresh
+timer; the app uses the authoritative totals instead.
+
 ## Debugging
 
 If you're having issues with the application not finding files, run the debug script:

@@ -26,7 +26,9 @@ class BackblazeStatusGUI:
         self.last_file_mtime = None  # Track last modification time of bzlist file
         self._sort_column = None
         self._sort_reverse = False
-        self._pending_file_count = 0
+        self._all_files = []  # Sample of the pending list; the tree shows a filtered view
+        self._last_status_info = {}
+        self._testimony = {}  # Backblaze's own backlog totals (see parse_host_testimony)
 
         self.setup_ui()
         self.update_status()
@@ -101,7 +103,27 @@ class BackblazeStatusGUI:
         files_frame = ttk.LabelFrame(main_frame, text="Files Scheduled for Backup", padding="10")
         files_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         files_frame.columnconfigure(0, weight=1)
-        files_frame.rowconfigure(0, weight=1)
+        files_frame.rowconfigure(1, weight=1)
+
+        # Search / filter box
+        search_frame = ttk.Frame(files_frame)
+        search_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
+        search_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(search_frame, text="Search:").grid(row=0, column=0, padx=(0, 5))
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add('write', lambda *_: self._populate_tree())
+        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
+        self.search_entry.grid(row=0, column=1, sticky=(tk.W, tk.E))
+        self.search_entry.bind('<Escape>', lambda e: self.search_var.set(''))
+        ttk.Button(search_frame, text="Clear", width=6,
+                   command=lambda: self.search_var.set('')).grid(row=0, column=2, padx=(5, 0))
+        self.filter_label = ttk.Label(search_frame, text="", foreground="gray")
+        self.filter_label.grid(row=0, column=3, padx=(8, 0))
+
+        # Ctrl+F from anywhere jumps to the search box
+        self.root.bind('<Control-f>', lambda e: (self.search_entry.focus_set(),
+                                                 self.search_entry.select_range(0, tk.END)))
 
         # Create Treeview for files
         columns = ('filename', 'size', 'status')
@@ -120,9 +142,9 @@ class BackblazeStatusGUI:
         hsb = ttk.Scrollbar(files_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
-        self.tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        self.tree.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        vsb.grid(row=1, column=1, sticky=(tk.N, tk.S))
+        hsb.grid(row=2, column=0, sticky=(tk.W, tk.E))
 
         # Copy support
         self.tree.bind('<Control-c>', lambda e: self._copy_selected_paths())
@@ -211,19 +233,22 @@ class BackblazeStatusGUI:
     def fetch_and_update(self, full_refresh=True):
         """Fetch data from Backblaze and update UI"""
         try:
-            # Always fetch status; only fetch file list on full refresh
+            # Always fetch status and totals; only fetch file list on full refresh
             status_info = self.bz_client.get_status()
+            testimony = self.bz_client.parse_host_testimony()
             pending_files = self.bz_client.get_pending_files() if full_refresh else None
 
             # Schedule UI update on main thread
-            self.root.after(0, lambda: self.update_ui(status_info, pending_files))
+            self.root.after(0, lambda: self.update_ui(status_info, pending_files, testimony))
 
         except Exception as e:
             self.root.after(0, lambda: self.show_error(str(e)))
 
-    def update_ui(self, status_info, pending_files):
+    def update_ui(self, status_info, pending_files, testimony=None):
         """Update UI elements with fetched data"""
         try:
+            if testimony:
+                self._testimony = testimony
             if self.debug:
                 print(f"[DEBUG UI] Received status_info: {status_info}")
 
@@ -235,7 +260,7 @@ class BackblazeStatusGUI:
             status_norm = client_status.lower().replace('_', ' ')
             if status_norm in ['running', 'backing up', 'transmitting', 'uploading part']:
                 self.status_label.config(foreground='green')
-            elif status_norm in ['paused', 'preparing', 'preparing large file']:
+            elif status_norm.startswith('paused') or status_norm in ['preparing', 'preparing large file']:
                 self.status_label.config(foreground='orange')
             elif status_norm in ['not running'] or status_norm.startswith('error'):
                 self.status_label.config(foreground='red')
@@ -247,7 +272,9 @@ class BackblazeStatusGUI:
             current_file_name = status_info.get('current_file_name', '')
             if self.debug:
                 print(f"[DEBUG UI] current_file_name: '{current_file_name}'")
-            if current_file_name:
+            if status_info.get('paused'):
+                self.activity_label.config(text=self._format_pause_activity(status_info))
+            elif current_file_name:
                 self.activity_label.config(text=current_file_name)
             else:
                 self.activity_label.config(text='None')
@@ -268,60 +295,20 @@ class BackblazeStatusGUI:
             # Update last updated time
             self.last_update_label.config(text=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-            # Skip file list update if this was a status-only refresh
+            # Skip file list update if this was a status-only refresh (totals still refresh)
             if pending_files is None:
+                self._update_pending_label()
                 return
 
-            # Update pending count (size updated after tree is populated)
-            self._pending_file_count = len(pending_files)
+            self._all_files = pending_files
+            self._last_status_info = status_info
+            self._populate_tree()
 
-            # Clear existing items in tree
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-
-            # Add pending files to tree
             if pending_files:
-                # Get current file being uploaded for status matching
-                current_uploading_file = status_info.get('current_file')
-                current_file_name = status_info.get('current_file_name', '')
-
-                for file_info in pending_files:
-                    filename = file_info.get('path', 'Unknown')
-                    # Use cached size if available, otherwise use what we have
-                    cached_size = self.file_size_cache.get(filename)
-                    current_size = file_info.get('size')
-
-                    # Prefer cached size if current is None; cache the file_info size if present
-                    if current_size is not None:
-                        self.file_size_cache[filename] = current_size
-                    display_size = current_size if current_size is not None else cached_size
-                    size_str = self.format_size(display_size)
-
-                    file_status = file_info.get('status', 'Pending')
-
-                    # Update status if this file is currently being uploaded
-                    if current_uploading_file and filename == current_uploading_file:
-                        # Determine more specific status based on current activity
-                        if current_file_name.startswith('Part '):
-                            file_status = f'⬆ {current_file_name}'
-                        elif current_file_name.startswith('Preparing '):
-                            file_status = '📝 Preparing for upload'
-                        else:
-                            file_status = '⬆ Uploading now'
-
-                    self.tree.insert('', tk.END, values=(filename, size_str, file_status))
-
-                self._update_pending_label()
                 self.status_bar.config(text=f"Updated successfully at {datetime.now().strftime('%H:%M:%S')} - {len(pending_files)} file(s) found")
-
-                # Re-apply sort if one is active
-                self._apply_sort()
-
                 # Start fetching sizes asynchronously
                 self.fetch_file_sizes_async(pending_files)
             else:
-                # Show message when no files found
-                self.tree.insert('', tk.END, values=('No pending backup files found or unable to access Backblaze data', '-', 'N/A'))
                 self.status_bar.config(text=f"Updated at {datetime.now().strftime('%H:%M:%S')} - No pending files detected")
 
         except Exception as e:
@@ -330,6 +317,94 @@ class BackblazeStatusGUI:
             self.refresh_button.config(state='normal')
             # Schedule next update
             self.root.after(self.refresh_interval, self.update_status)
+
+    def _format_pause_activity(self, status_info):
+        """Describe an active pause: when it lifts and how long that is from now"""
+        until_millis = status_info.get('pause_until_millis') or 0
+        if not until_millis:
+            return 'Paused'
+
+        remaining_s = until_millis / 1000.0 - time.time()
+        resumes_at = datetime.fromtimestamp(until_millis / 1000.0).strftime('%H:%M:%S')
+
+        if remaining_s <= 0:
+            return f'Pause expired at {resumes_at}'
+
+        minutes = int(remaining_s // 60)
+        if minutes >= 60:
+            left = f'{minutes // 60}h {minutes % 60}m'
+        else:
+            left = f'{minutes}m'
+
+        text = f'Resumes at {resumes_at} ({left} left)'
+        # 'action_pause_backup' is the plain user-pressed-pause case; anything else is
+        # worth surfacing verbatim since we haven't seen the full vocabulary
+        reason = status_info.get('pause_reason', '')
+        if reason and reason != 'action_pause_backup':
+            text += f' — {reason}'
+        return text
+
+    def _populate_tree(self):
+        """Rebuild the tree from self._all_files, honouring the current search filter"""
+        # Every whitespace-separated term must appear in the path (case-insensitive)
+        terms = self.search_var.get().lower().split()
+
+        status_info = self._last_status_info
+        current_uploading_file = status_info.get('current_file')
+        current_file_name = status_info.get('current_file_name', '')
+
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        shown = 0
+        for file_info in self._all_files:
+            filename = file_info.get('path', 'Unknown')
+            if terms:
+                lowered = filename.lower()
+                if not all(term in lowered for term in terms):
+                    continue
+
+            # Use cached size if available, otherwise use what we have
+            cached_size = self.file_size_cache.get(filename)
+            current_size = file_info.get('size')
+
+            # Prefer cached size if current is None; cache the file_info size if present
+            if current_size is not None:
+                self.file_size_cache[filename] = current_size
+            display_size = current_size if current_size is not None else cached_size
+            size_str = self.format_size(display_size)
+
+            file_status = file_info.get('status', 'Pending')
+
+            # Update status if this file is currently being uploaded
+            if current_uploading_file and filename == current_uploading_file:
+                # Determine more specific status based on current activity
+                if current_file_name.startswith('Part '):
+                    file_status = f'⬆ {current_file_name}'
+                elif current_file_name.startswith('Preparing '):
+                    file_status = '📝 Preparing for upload'
+                else:
+                    file_status = '⬆ Uploading now'
+
+            self.tree.insert('', tk.END, values=(filename, size_str, file_status))
+            shown += 1
+
+        total = len(self._all_files)
+        if not total:
+            self.tree.insert('', tk.END, values=('No pending backup files found or unable to access Backblaze data', '-', 'N/A'))
+            self.filter_label.config(text="")
+        elif not shown:
+            self.tree.insert('', tk.END, values=(f'No files match "{self.search_var.get()}"', '-', 'N/A'))
+            self.filter_label.config(text=f"0 of {total}")
+        elif terms:
+            self.filter_label.config(text=f"{shown} of {total}")
+        else:
+            self.filter_label.config(text="")
+
+        self._update_pending_label()
+
+        # Re-apply sort if one is active
+        self._apply_sort()
 
     def manual_refresh(self):
         """Manually trigger a refresh"""
@@ -380,19 +455,37 @@ class BackblazeStatusGUI:
             pass  # Silently ignore errors if tree has been cleared
 
     def _update_pending_label(self):
-        """Update the Total Pending label with file count and best-available total size"""
-        count = getattr(self, '_pending_file_count', 0)
+        """Update the Total Pending label with the real backlog size
+
+        Prefers Backblaze's own totals from bzhost_testimony_x.xml — these cover the whole
+        backlog, whereas bzlist_filesremaining.txt is only a truncated sample of it. Falls
+        back to summing what we can see if the testimony file is unavailable.
+        """
+        remaining = self._testimony.get('remaining_files')
+        sample = len(self._all_files)
+
+        if remaining is not None:
+            total_bytes = self._testimony.get('remaining_bytes') or 0
+            text = f"{remaining:,} files ({self.format_size(total_bytes)})"
+            if sample and sample < remaining:
+                text += f" — listing {sample}"
+            self.pending_label.config(text=text)
+            return
+
+        # No testimony: fall back to the visible sample, flagged as a lower bound
         total = 0
         has_unknown = False
-        for k in self.tree.get_children():
-            filename = self.tree.set(k, 'filename')
-            size = self.file_size_cache.get(filename)
+        for file_info in self._all_files:
+            size = self.file_size_cache.get(file_info.get('path'))
             if size is not None:
                 total += size
             else:
                 has_unknown = True
-        prefix = '~' if has_unknown else ''
-        self.pending_label.config(text=f"{count} files ({prefix}{self.format_size(total)})")
+
+        truncated = getattr(self.bz_client, 'list_truncated', False)
+        count_str = f"{sample}+" if truncated else str(sample)
+        prefix = '~' if (has_unknown or truncated) else ''
+        self.pending_label.config(text=f"{count_str} files ({prefix}{self.format_size(total)})")
 
     def _sort_tree(self, col):
         """Sort the file list by the given column, toggling direction on repeated clicks"""
