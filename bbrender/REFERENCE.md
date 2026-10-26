@@ -40,7 +40,7 @@ values fall back to the default.
 | `[u]...[/u]` | none | Underline text. |
 | `[s]...[/s]` | none | Strikethrough text. |
 | `[font=Georgia]...[/font]` | `value`: font family | Sets `font-family` after sanitizing the family name. |
-| `[gfont=Tangerine]...[/gfont]` | `value`/`family`/`name`: Google Font family; `load`: default `true`; `weight`: optional weight list | Applies the font family and optionally injects a Google Fonts stylesheet. |
+| `[gfont=Tangerine]...[/gfont]` | `value`/`family`/`name`: Google Font family; `load`: default `true`; `weight`: optional weight list | Applies the font family and optionally injects a Google Fonts stylesheet. Without `weight`, the default and bold (`700`) faces are loaded so `[b]` avoids synthetic bold. |
 | `[size=48]...[/size]` | `value`: `1..500`, default `48` | Sets font size in pixels. |
 | `[big]...[/big]` | none | Sets font size to `1.5em`. |
 | `[small]...[/small]` | none | Sets font size to `0.67em`. |

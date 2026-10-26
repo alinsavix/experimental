@@ -28,10 +28,18 @@ Then open:
 http://127.0.0.1:4173/sb_bbrender.html
 ```
 
-For OBS, use either the local URL above during development or a built artifact
-from `dist/`. The source page loads `bbrender.js` and the vendored
-Streamer.bot client separately. The packed build inlines everything into one
-HTML file.
+For OBS, use the packed build: run `npm run build` and point the browser source
+at `dist/packed/sb_bbrender.html`, or run `make install` (or `install.bat`) to
+build and copy it to `C:/OBS/html` (override with `INSTALL_DIR=...`). The
+packed build inlines everything into one HTML file, so it works as a local file
+without a server. To pass URL options to a local file, leave OBS's "Local file"
+box unchecked and enter a `file:///` URL instead, for example
+`file:///C:/OBS/html/sb_bbrender.html?duration=6000`.
+
+The top-level `sb_bbrender.html` is the source the build reads from. It loads
+`bbrender.js`, the `src/` modules, and the vendored Streamer.bot client
+separately, so it only works when served from the repo (for example with
+`npm run serve`). Use it for development rather than as the OBS source.
 
 ## URL Options
 

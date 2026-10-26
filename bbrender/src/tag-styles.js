@@ -287,7 +287,16 @@ function ensureGoogleFont(doc, family, attrs) {
   if (doc.getElementById(id)) return;
 
   const weight = String(attrs.weight || attrs.wght || '').replace(/[^0-9;]/g, '');
-  const familyParam = family.replace(/\s+/g, '+') + (weight ? ':wght@' + weight : '');
+  const familyName = family.replace(/\s+/g, '+');
+  appendGoogleFontLink(doc, id, familyName + (weight ? ':wght@' + weight : ''));
+  if (!weight) {
+    // Load bold separately so [b] uses the real bold face instead of synthetic bold.
+    // Families without a 700 weight make this request fail harmlessly.
+    appendGoogleFontLink(doc, id + '-bold', familyName + ':wght@700');
+  }
+}
+
+function appendGoogleFontLink(doc, id, familyParam) {
   const link = doc.createElement('link');
   link.id = id;
   link.rel = 'stylesheet';

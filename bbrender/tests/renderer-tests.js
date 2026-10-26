@@ -49,9 +49,9 @@ export function runRendererTests(BBRender, doc = document) {
 
     const stroked = doc.createElement('div');
     BBRender.renderToElement(stroked, '[stroke color=black width=3]x[/stroke]');
-    assert('stroke tag applies text stroke', stroked.querySelector('[data-bb-tag="stroke"]').style.webkitTextStroke === '3px black');
+    assert('stroke tag applies text stroke', stroked.querySelector('[data-bb-tag="stroke"]').style.webkitTextStroke     === '3px black');
 
-    const spaced = doc.createElement('div');
+        const spaced = doc.createElement('div');
     BBRender.renderToElement(spaced, '[b][i]Styled[reset] plain [color=dodger-blue]Blue[/color] [opacity=0.45]Faded[/opacity]');
     assert('renderer preserves spaces between styled spans', spaced.textContent.includes('Styled plain Blue Faded'));
 
@@ -181,6 +181,7 @@ export function runRendererTests(BBRender, doc = document) {
     BBRender.renderToElement(fonted, '[gfont=Lobster]font[/gfont]');
     assert('google font span applies family', fonted.querySelector('[data-bb-tag="gfont"]').style.fontFamily.includes('Lobster'));
     assert('google font stylesheet link is injected', doc.getElementById('bb-gfont-lobster') !== null);
+    assert('google font bold stylesheet link is injected', doc.getElementById('bb-gfont-lobster-bold') !== null);
 
     const imaged = doc.createElement('div');
     BBRender.renderToElement(imaged, '[img src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27/%3E" width=32 height=24]');

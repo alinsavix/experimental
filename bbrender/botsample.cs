@@ -76,17 +76,16 @@ public class CPHInline
 
     private void Send(Sample sample)
     {
-        var payload = new Dictionary<string, object>
+        var data = new Dictionary<string, object>
         {
-            { "type", "bbcode.render" },
             { "bbcode", "[small]" + sample.Name + "[/small][newline]" + sample.BBCode },
             { "duration", sample.Duration }
         };
 
-        if (sample.Anchor != null) payload["anchor"] = sample.Anchor;
-        if (sample.X.HasValue) payload["x"] = sample.X.Value;
-        if (sample.Y.HasValue) payload["y"] = sample.Y.Value;
-        if (sample.FontSize.HasValue) payload["fontSize"] = sample.FontSize.Value;
+        if (sample.Anchor != null) data["anchor"] = sample.Anchor;
+        if (sample.X.HasValue) data["x"] = sample.X.Value;
+        if (sample.Y.HasValue) data["y"] = sample.Y.Value;
+        if (sample.FontSize.HasValue) data["fontSize"] = sample.FontSize.Value;
         if (sample.TransitionIn != null || sample.TransitionOut != null)
         {
             var transition = new Dictionary<string, object>();
@@ -96,8 +95,14 @@ public class CPHInline
             if (sample.OutTime.HasValue) transition["outTime"] = sample.OutTime.Value;
             if (sample.Ease != null) transition["ease"] = sample.Ease;
             if (sample.Scale.HasValue) transition["scale"] = sample.Scale.Value;
-            payload["transition"] = transition;
+            data["transition"] = transition;
         }
+
+        var payload = new Dictionary<string, object>
+        {
+            { "type", "bbcode.render" },
+            { "data", data }
+        };
 
         CPH.WebsocketBroadcastJson(JsonConvert.SerializeObject(payload));
     }
@@ -107,7 +112,7 @@ public class CPHInline
         var payload = new
         {
             type = "bbcode.render",
-            command = "clear"
+            data = new { command = "clear" }
         };
 
         CPH.WebsocketBroadcastJson(JsonConvert.SerializeObject(payload));
